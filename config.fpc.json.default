@@ -1,0 +1,16 @@
+{
+  "ttl": 3600,
+  "purge_secret": "true",
+  "included_mimetypes": [
+    "text/html",
+    "application/json",
+    "text/css",
+    "text/javascript",
+    "application/javascript",
+    "font/",
+    "image/svg"
+  ],
+  "excluded_paths": ["/admin", "/customer", "/checkout", "/wishlist"],
+  "vary_on_params": ["utm_source", "utm_medium"],
+  "vary_on_cookies": ["X-Magento-Vary"]
+}

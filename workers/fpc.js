@@ -5,8 +5,7 @@ addEventListener('fetch', event => {
 async function handleRequest(event) {
   const request = event.request;
 
-  // Get config from KV or use defaults
-  const config = await getFPCConfig();
+  const config = await FPC_CONFIG.get('config', { type: 'json' });
 
   if (shouldBypassCache(request, config)) {
     return fetch(request);
@@ -14,8 +13,8 @@ async function handleRequest(event) {
 
   const cacheKey = await getCacheKey(request, config);
 
-  if (request.method === 'PURGE') {
-    return handlePurgeRequest(request, cacheKey, config);
+  if (request.method === 'POST' && request.headers.get('X-Purge-Cache') === config.purge_secret) {
+    return handlePurgeRequest(cacheKey);
   }
 
   const cached = await FPC_CACHE.get(cacheKey, { type: 'json' });
@@ -26,12 +25,12 @@ async function handleRequest(event) {
   }
 
   if (cached) {
-    event.waitUntil(fetchAndCache(request, cacheKey, config)); // tada!
+    event.waitUntil(fetchAndCache(request, cacheKey, config));
     const headers = { ...cached.headers, 'X-FPC-Cache': 'STALE' };
     return new Response(cached.body, { headers });
   }
 
-  const response = await fetchAndCache(request, cacheKey, config);
+  const response = await fetchAndCache(request, cacheKey, cached, config);
 
   const headers = new Headers(response.headers);
   headers.set('X-FPC-Cache', 'MISS');
@@ -40,56 +39,6 @@ async function handleRequest(event) {
     statusText: response.statusText,
     headers: headers
   });
-}
-
-async function fetchAndCache(request, cacheKey, config) {
-  const originResponse = await fetch(request);
-
-  // Only process successful GET requests for caching
-  if (originResponse.ok && request.method === 'GET') {
-    const contentType = originResponse.headers.get('Content-Type') || '';
-
-    // Check if the content type is in the list of cacheable types.
-    if (!config.included_mimetypes.some(mime => contentType.includes(mime))) {
-      return originResponse; // Return original response without caching
-    }
-
-    // We need to clone the response to be able to read its body for caching
-    // and still return the original response to the client.
-    const responseToCache = originResponse.clone();
-
-    const headers = {};
-    for (let [key, value] of responseToCache.headers.entries()) {
-      headers[key] = value;
-    }
-
-    const body = await responseToCache.text();
-    const cacheData = {
-      body: body,
-      headers: headers,
-      expires: Date.now() + (config.ttl * 1000),
-    };
-
-    // Store the cache data as a JSON string.
-    await FPC_CACHE.put(cacheKey, JSON.stringify(cacheData));
-
-    // Return the original response. Its body is still intact and can be streamed.
-    return originResponse;
-  }
-
-  return originResponse;
-}
-
-async function handlePurgeRequest(request, cacheKey, config) {
-  if (!cacheKey) {
-    return new Response('Cache key not provided', { status: 400 });
-  }
-  const purgeSecret = request.headers.get('X-Purge-Secret');
-  if (!purgeSecret || purgeSecret !== config.purge_secret) {
-    return new Response('Invalid purge secret', { status: 403 });
-  }
-  await FPC_CACHE.delete(cacheKey);
-  return new Response('Cache purged', { status: 200 });
 }
 
 function shouldBypassCache(request, config) {
@@ -115,33 +64,71 @@ async function getCacheKey(request, config) {
     key += `?${sortedParams.join('&')}`;
   }
 
-  // Vary cache by cookie value
-  if (config.vary_on_cookie) {
+  // Vary cache by cookie values (array)
+  if (Array.isArray(config.vary_on_cookies) && config.vary_on_cookies.length > 0) {
     const cookieHeader = request.headers.get('Cookie') || '';
     const cookies = cookieHeader.split(';').map(c => c.trim());
-    const varyCookie = cookies.find(c => c.startsWith(`${config.vary_on_cookie}=`));
-    if (varyCookie) {
-      key += `#${varyCookie.split('=')[1]}`;
+    let varyValues = [];
+    for (const cookieName of config.vary_on_cookies) {
+      const found = cookies.find(c => c.startsWith(`${cookieName}=`));
+      if (found) {
+        varyValues.push(found.split('=')[1]);
+      } else {
+        varyValues.push('');
+      }
+    }
+    if (varyValues.length > 0) {
+      key += `#${varyValues.join('_')}`;
     }
   }
 
   return key;
 }
 
-async function getFPCConfig() {
-  let config = await FPC_CONFIG.get('config', { type: 'json' });
-  if (!config) {
-    // Default config if nothing is in KV
-    config = {
-      ttl: 3600, // 1 hour
-      purge_secret: "your-default-secret", // CHANGE THIS
-      included_mimetypes: ["text/html", "application/json"],
-      excluded_paths: ["/admin", "/customer", "/checkout", "/wishlist"],
-      vary_on_params: ["utm_source", "utm_medium"], // Common tracking params
-      vary_on_cookie: "X-Magento-Vary"
+async function fetchAndCache(request, cacheKey, cached, config) {
+  const originResponse = await fetch(request);
+
+  // Only process successful GET requests for caching
+  if (originResponse.ok && request.method === 'GET') {
+    const contentType = originResponse.headers.get('Content-Type') || '';
+
+    // Check if the content type is in the list of cacheable types.
+    if (!config.included_mimetypes.some(mime => contentType.startsWith(mime))) {
+      return originResponse; // Return original response without caching
+    }
+
+    // We need to clone the response to be able to read its body for caching
+    // and still return the original response to the client.
+    const responseToCache = originResponse.clone();
+
+    const headers = {};
+    for (let [key, value] of responseToCache.headers.entries()) {
+      headers[key] = value;
+    }
+
+    const body = await responseToCache.text();
+    const cacheData = {
+      body: body,
+      headers: headers,
+      expires: Date.now() + (config.ttl * 1000),
     };
-    // Store default config in KV for future requests
-    await FPC_CONFIG.put('config', JSON.stringify(config));
+
+    // Store the cache data as a JSON string.
+    if (!cached || cached.body !== cacheData.body) { // Avoid redundant writes
+      await FPC_CACHE.put(cacheKey, JSON.stringify(cacheData));
+    }
+
+    // Return the original response. Its body is still intact and can be streamed.
+    return originResponse;
   }
-  return config;
+
+  return originResponse;
+}
+
+async function handlePurgeRequest(cacheKey) {
+  if (!cacheKey) {
+    return new Response('Cache key not provided', { status: 400 });
+  }
+  await FPC_CACHE.delete(cacheKey);
+  return new Response('Cache purged', { status: 200 });
 }
