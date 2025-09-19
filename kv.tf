@@ -1,11 +1,11 @@
 resource "cloudflare_workers_kv_namespace" "fpc_cache" {
   account_id = var.account_id
-  title      = "${var.subdomain}-fpc-cache"
+  title      = "${var.subdomain != "" ? var.subdomain : "root"}-fpc-cache"
 }
 
 resource "cloudflare_workers_kv_namespace" "fpc_config" {
   account_id = var.account_id
-  title      = "${var.subdomain}-fpc-config"
+  title      = "${var.subdomain != "" ? var.subdomain : "root"}-fpc-config"
 }
 
 resource "cloudflare_workers_kv" "fpc_config_init" {

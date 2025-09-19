@@ -3,7 +3,9 @@ variable "zone_name" {
 }
 
 variable "subdomain" {
-  description = "The subdomain for the Magento 2 store (e.g., 'store')."
+  description = "The subdomain for the Magento 2 store (e.g., 'store'). Leave empty for root domain."
+  type        = string
+  default     = ""
 }
 
 variable "api_token" {

@@ -12,7 +12,7 @@ provider "cloudflare" {
 
 resource "cloudflare_workers_script" "fpc" {
   account_id  = var.account_id
-  script_name = "${var.subdomain}-fpc"
+  script_name = "${var.subdomain != "" ? var.subdomain : "root"}-fpc"
   content     = file("workers/fpc.js")
 
   bindings = [
@@ -35,6 +35,6 @@ data "cloudflare_zones" "zone" {
 
 resource "cloudflare_workers_route" "fpc_route" {
   zone_id = data.cloudflare_zones.zone.result[0].id
-  pattern = "${var.subdomain}.${var.zone_name}/*"
+  pattern = "${var.subdomain != "" ? var.subdomain + "." : ""}${var.zone_name}/*"
   script  = cloudflare_workers_script.fpc.script_name
 }
