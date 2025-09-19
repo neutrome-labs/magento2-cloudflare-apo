@@ -16,3 +16,15 @@ variable "api_token" {
 variable "account_id" {
   description = "The Cloudflare account ID."
 }
+
+variable "bypass_static" {
+  description = "If true, create a bypass route for /static/* so the worker is not applied to static assets."
+  type        = bool
+  default     = false
+}
+
+variable "bypass_media" {
+  description = "If true, create a bypass route for /media/* so the worker is not applied to media assets."
+  type        = bool
+  default     = false
+}
