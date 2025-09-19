@@ -20,11 +20,6 @@ resource "cloudflare_workers_script" "fpc" {
       name         = "FPC_CACHE"
       namespace_id = cloudflare_workers_kv_namespace.fpc_cache.id
       type         = "kv_namespace"
-    },
-    {
-      name         = "FPC_CONFIG"
-      namespace_id = cloudflare_workers_kv_namespace.fpc_config.id
-      type         = "kv_namespace"
     }
   ]
 }
@@ -35,6 +30,6 @@ data "cloudflare_zones" "zone" {
 
 resource "cloudflare_workers_route" "fpc_route" {
   zone_id = data.cloudflare_zones.zone.result[0].id
-  pattern = "${var.subdomain != "" ? var.subdomain + "." : ""}${var.zone_name}/*"
+  pattern = "${var.subdomain != "" ? "${var.subdomain}." : ""}${var.zone_name}/*"
   script  = cloudflare_workers_script.fpc.script_name
 }

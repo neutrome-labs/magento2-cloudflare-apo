@@ -5,7 +5,24 @@ addEventListener('fetch', event => {
 async function handleRequest(event) {
   const request = event.request;
 
-  const config = await FPC_CONFIG.get('config', { type: 'json' });
+  // const config = await FPC_CONFIG.get('config', { type: 'json' });
+  const config = {
+    "ttl": 3600,
+    "purge_secret": "true",
+    "included_mimetypes": [
+      "text/html",
+      "application/json",
+      "text/css",
+      "text/javascript",
+      "application/javascript",
+      "font/",
+      "image/svg"
+    ],
+    "excluded_paths": ["/admin", "customer", "checkout", "wishlist"],
+    "vary_on_params": [],
+    "vary_on_headers": ["x-magento-tags"],
+    "vary_on_cookies": ["X-Magento-Vary"]
+  };
 
   if (shouldBypassCache(request, config)) {
     return fetch(request);
@@ -25,7 +42,7 @@ async function handleRequest(event) {
   }
 
   if (cached) {
-    event.waitUntil(fetchAndCache(request, cacheKey, config));
+    event.waitUntil(fetchAndCache(request, cacheKey, cached, config));
     const headers = { ...cached.headers, 'X-FPC-Cache': 'STALE' };
     return new Response(cached.body, { headers });
   }
@@ -44,7 +61,7 @@ async function handleRequest(event) {
 function shouldBypassCache(request, config) {
   const url = new URL(request.url);
   if (request.method !== 'GET') return true;
-  if (config.excluded_paths.some(path => url.pathname.startsWith(path))) return true;
+  if (config.excluded_paths.some(path => url.pathname.includes(path))) return true;
   return false;
 }
 
@@ -122,6 +139,10 @@ async function fetchAndCache(request, cacheKey, cached, config) {
     }
 
     const body = await responseToCache.text();
+    if (body.length < 3) {
+      return originResponse;
+    }
+
     const cacheData = {
       body: body,
       headers: headers,
