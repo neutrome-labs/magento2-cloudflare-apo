@@ -52,25 +52,27 @@ async function getCacheKey(request, config) {
   const url = new URL(request.url);
   let key = `fpc:${url.hostname}${url.pathname}`;
 
-  // Vary cache by specified query parameters
+  // Vary cache by specified query parameters (case-insensitive)
   const params = new URLSearchParams(url.search);
+  const paramKeys = Array.from(params.keys());
   const sortedParams = [];
   for (const p of config.vary_on_params) {
-    if (params.has(p)) {
-      sortedParams.push(`${p}=${params.get(p)}`);
+    const matchKey = paramKeys.find(k => k.toLowerCase() === p.toLowerCase());
+    if (matchKey) {
+      sortedParams.push(`${matchKey}=${params.get(matchKey)}`);
     }
   }
   if (sortedParams.length > 0) {
     key += `?${sortedParams.join('&')}`;
   }
 
-  // Vary cache by cookie values (array)
+  // Vary cache by cookie values (case-insensitive)
   if (Array.isArray(config.vary_on_cookies) && config.vary_on_cookies.length > 0) {
     const cookieHeader = request.headers.get('Cookie') || '';
     const cookies = cookieHeader.split(';').map(c => c.trim());
     let varyValues = [];
     for (const cookieName of config.vary_on_cookies) {
-      const found = cookies.find(c => c.startsWith(`${cookieName}=`));
+      const found = cookies.find(c => c.split('=')[0].trim().toLowerCase() === cookieName.toLowerCase());
       if (found) {
         varyValues.push(found.split('=')[1]);
       } else {
@@ -79,6 +81,19 @@ async function getCacheKey(request, config) {
     }
     if (varyValues.length > 0) {
       key += `#${varyValues.join('_')}`;
+    }
+  }
+
+  // Vary cache by header values (case-insensitive)
+  if (Array.isArray(config.vary_on_headers) && config.vary_on_headers.length > 0) {
+    let headerValues = [];
+    for (const headerName of config.vary_on_headers) {
+      // Headers.get is case-insensitive, but to be sure, normalize all keys
+      const value = request.headers.get(headerName);
+      headerValues.push(value || '');
+    }
+    if (headerValues.length > 0) {
+      key += `@${headerValues.join('_')}`;
     }
   }
 

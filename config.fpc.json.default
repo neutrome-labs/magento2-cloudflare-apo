@@ -11,6 +11,7 @@
     "image/svg"
   ],
   "excluded_paths": ["/admin", "/customer", "/checkout", "/wishlist"],
-  "vary_on_params": ["utm_source", "utm_medium"],
+  "vary_on_params": [],
+  "vary_on_headers": ["x-magento-tags"],
   "vary_on_cookies": ["X-Magento-Vary"]
 }
