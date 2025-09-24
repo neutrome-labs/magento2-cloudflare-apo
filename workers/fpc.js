@@ -6,6 +6,7 @@ async function handleRequest(event) {
   const request = event.request;
   const config = {
     "ttl": 3600,
+    "grace": 3600*9,
     "purge_secret": "true",
     "included_mimetypes": [
       "text/html",
@@ -163,7 +164,7 @@ async function fetchAndCache(request, cacheKey, cached, config) {
     };
 
     if (!cached || cached.body !== cacheData.body) { // Avoid redundant writes
-      await FPC_CACHE.put(cacheKey, JSON.stringify(cacheData));
+      await FPC_CACHE.put(cacheKey, JSON.stringify(cacheData), { expirationTtl: config.ttl + config.grace });
     }
 
     return originResponse;
