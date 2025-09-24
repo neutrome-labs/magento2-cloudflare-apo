@@ -5,7 +5,6 @@ addEventListener('fetch', event => {
 
 function debugLog(config, ...args) {
   if (config && config.debug) {
-    // Prefix logs for easier filtering
     console.log('[FPC DEBUG]', ...args);
   }
 }
@@ -18,6 +17,7 @@ async function handleRequest(event) {
     "ttl": 3600,
     "grace": 3600*9,
     "purge_secret": "true",
+    "cache_logged_in": true,
     "included_mimetypes": [
       "text/html",
       "text/css",
@@ -26,7 +26,22 @@ async function handleRequest(event) {
       "font/",
       "image/svg"
     ],
-    "excluded_paths": ["/admin", "customer", "checkout", "wishlist"],
+    "excluded_paths": [
+      "/admin",
+      "/customer",
+      "/checkout",
+      "/wishlist",
+      "/cart",
+      "/sales",
+      "/graphql",
+      "/rest/",
+      "/customer/section/",
+      "/customer/account",
+      "/customer/address",
+      "/customer/orders",
+      "/onestepcheckout",
+      "/password",
+    ],
     "vary_on_params": "*",
     "ignored_params": [
       "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
@@ -60,14 +75,18 @@ async function handleRequest(event) {
   if (cached && cached.expires > Date.now()) {
     const headers = { ...cached.headers, 'X-FPC-Cache': 'HIT' };
     debugLog(config, `Cache HIT for key: ${cacheKey}. Expires in ${(cached.expires - Date.now())/1000 | 0}s`);
-    return new Response(cached.body, { headers });
+    return request.method === 'HEAD'
+      ? new Response(null, { headers })
+      : new Response(cached.body, { headers });
   }
 
   if (cached) {
     event.waitUntil(fetchAndCache(request, cacheKey, cached, config));
     const headers = { ...cached.headers, 'X-FPC-Cache': 'STALE' };
     debugLog(config, `Cache STALE for key: ${cacheKey}. Stale age ${(Date.now() - cached.expires)/1000 | 0}s`);
-    return new Response(cached.body, { headers });
+    return request.method === 'HEAD'
+      ? new Response(null, { headers })
+      : new Response(cached.body, { headers });
   }
 
   const response = await fetchAndCache(request, cacheKey, cached, config);
@@ -75,25 +94,41 @@ async function handleRequest(event) {
   const headers = new Headers(response.headers);
   headers.set('X-FPC-Cache', 'MISS');
   debugLog(config, `Cache MISS for key: ${cacheKey}`);
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: headers
-  });
+
+  return request.method === 'HEAD' 
+    ? new Response(null, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: headers
+    })
+    : new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: headers
+    });
 }
 
 
 function shouldBypassCache(request, config) {
   const url = new URL(request.url);
-  if (request.method !== 'GET') {
-    debugLog(config, `Bypass reason matched: method is ${request.method} (only GET cached)`);
+
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    debugLog(config, `Bypass reason matched: method is ${request.method} (only GET/HEAD cached)`);
     return { bypass: true, reason: `method:${request.method}` };
   }
+
+  const authz = request.headers.get('Authorization');
+  if (authz) {
+    debugLog(config, 'Bypass reason matched: Authorization header present');
+    return { bypass: true, reason: 'authz' };
+  }
+
   const matchedPath = (config.excluded_paths || []).find(path => url.pathname.includes(path));
   if (matchedPath) {
     debugLog(config, `Bypass reason matched: excluded_paths contains '${matchedPath}' for pathname '${url.pathname}'`);
     return { bypass: true, reason: `excluded_path:${matchedPath}` };
   }
+
   return { bypass: false };
 }
 
@@ -168,7 +203,51 @@ async function getCacheKey(request, config) {
 
 
 async function fetchAndCache(request, cacheKey, cached, config) {
-  const originResponse = await fetch(request);
+  const reqUrl = new URL(request.url);
+  const isStaticAsset = /\.(?:css|js|mjs|json|map|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot)(?:\?.*)?$/i.test(reqUrl.pathname);
+  const isExcludedPath = (config.excluded_paths || []).some(path => reqUrl.pathname.includes(path));
+  const isCacheableHtmlPath = !isStaticAsset && !isExcludedPath;
+
+  const cookieHeader = request.headers.get('Cookie') || '';
+  let sanitizedRequest = request;
+  if (cookieHeader) {
+    const headers = new Headers(request.headers);
+    if (isStaticAsset) {
+      headers.delete('Cookie');
+    } else {
+      const allowlist = [
+        'X-Magento-Vary',
+        'store',
+        'currency',
+        'form_key',
+        'private_content_version',
+        'section_data_ids',
+        'mage-cache-sessid',
+        'mage-cache-storage',
+        'mage-cache-storage-section-invalidation'
+      ];
+
+      if (config.cache_logged_in && isCacheableHtmlPath) {
+        allowlist.push('PHPSESSID');
+      }
+
+      const parsed = cookieHeader.split(';').map(c => c.trim());
+
+      const kept = parsed.filter(c => {
+        const name = c.split('=')[0].trim();
+        return allowlist.some(a => a.toLowerCase() === name.toLowerCase());
+      });
+
+      if (kept.length > 0) {
+        headers.set('Cookie', kept.join('; '));
+      } else {
+        headers.delete('Cookie');
+      }
+    }
+    sanitizedRequest = new Request(request, { headers });
+  }
+
+  const originResponse = await fetch(sanitizedRequest);
 
   if (originResponse.ok && request.method === 'GET') {
     const contentType = originResponse.headers.get('Content-Type') || '';
@@ -185,6 +264,18 @@ async function fetchAndCache(request, cacheKey, cached, config) {
     for (let [key, value] of responseToCache.headers.entries()) {
       headers[key] = value;
     }
+
+    if (/^text\/html/i.test(contentType) && responseToCache.headers.has('Set-Cookie')) {
+      delete headers['set-cookie'];
+    }
+
+    /*
+    const cc = responseToCache.headers.get('Cache-Control') || '';
+    if (/(?:no-store|private|no-cache)/i.test(cc)) {
+      debugLog(config, `Skip caching: Cache-Control indicates non-cacheable -> '${cc}'`);
+      return originResponse;
+    }
+    */
 
     const body = await responseToCache.text();
     if (body.length < 3) {
