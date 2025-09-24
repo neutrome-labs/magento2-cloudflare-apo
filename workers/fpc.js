@@ -4,8 +4,6 @@ addEventListener('fetch', event => {
 
 async function handleRequest(event) {
   const request = event.request;
-
-  // const config = await FPC_CONFIG.get('config', { type: 'json' });
   const config = {
     "ttl": 3600,
     "purge_secret": "true",
@@ -19,7 +17,14 @@ async function handleRequest(event) {
       "image/svg"
     ],
     "excluded_paths": ["/admin", "customer", "checkout", "wishlist"],
-    "vary_on_params": [],
+    "vary_on_params": "*",
+    "ignored_params": [
+      "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
+      "gclid", "dclid", "fbclid", "msclkid", "yclid", "icid", "gclsrc",
+      "mc_cid", "mc_eid", "_bta_tid", "_bta_c",
+      "_ga", "_gl", "_gid", "_gac", "ga_source", "ga_medium",
+      "ref", "referrer"
+    ],
     "vary_on_headers": ["x-magento-tags"],
     "vary_on_cookies": ["X-Magento-Vary"]
   };
@@ -69,21 +74,35 @@ async function getCacheKey(request, config) {
   const url = new URL(request.url);
   let key = `fpc:${url.hostname}${url.pathname}`;
 
-  // Vary cache by specified query parameters (case-insensitive)
   const params = new URLSearchParams(url.search);
-  const paramKeys = Array.from(params.keys());
-  const sortedParams = [];
-  for (const p of config.vary_on_params) {
-    const matchKey = paramKeys.find(k => k.toLowerCase() === p.toLowerCase());
-    if (matchKey) {
-      sortedParams.push(`${matchKey}=${params.get(matchKey)}`);
+  const allKeys = Array.from(params.keys());
+  let selectedPairs = [];
+
+  const isAll = typeof config.vary_on_params === 'string' && config.vary_on_params.trim() === '*';
+  if (isAll) {
+    const ignored = new Set(
+      (config.ignored_params || []).map(p => String(p).toLowerCase())
+    );
+    const keptKeys = allKeys
+      .filter(k => !ignored.has(k.toLowerCase()))
+      .sort((a, b) => a.localeCompare(b));
+    for (const k of keptKeys) {
+      selectedPairs.push(`${k}=${params.get(k)}`);
+    }
+  } else if (Array.isArray(config.vary_on_params) && config.vary_on_params.length > 0) {
+    const paramKeys = allKeys;
+    for (const p of config.vary_on_params) {
+      const matchKey = paramKeys.find(k => k.toLowerCase() === String(p).toLowerCase());
+      if (matchKey) {
+        selectedPairs.push(`${matchKey}=${params.get(matchKey)}`);
+      }
     }
   }
-  if (sortedParams.length > 0) {
-    key += `?${sortedParams.join('&')}`;
+
+  if (selectedPairs.length > 0) {
+    key += `?${selectedPairs.join('&')}`;
   }
 
-  // Vary cache by cookie values (case-insensitive)
   if (Array.isArray(config.vary_on_cookies) && config.vary_on_cookies.length > 0) {
     const cookieHeader = request.headers.get('Cookie') || '';
     const cookies = cookieHeader.split(';').map(c => c.trim());
@@ -101,11 +120,9 @@ async function getCacheKey(request, config) {
     }
   }
 
-  // Vary cache by header values (case-insensitive)
   if (Array.isArray(config.vary_on_headers) && config.vary_on_headers.length > 0) {
     let headerValues = [];
     for (const headerName of config.vary_on_headers) {
-      // Headers.get is case-insensitive, but to be sure, normalize all keys
       const value = request.headers.get(headerName);
       headerValues.push(value || '');
     }
@@ -120,17 +137,13 @@ async function getCacheKey(request, config) {
 async function fetchAndCache(request, cacheKey, cached, config) {
   const originResponse = await fetch(request);
 
-  // Only process successful GET requests for caching
   if (originResponse.ok && request.method === 'GET') {
     const contentType = originResponse.headers.get('Content-Type') || '';
 
-    // Check if the content type is in the list of cacheable types.
     if (!config.included_mimetypes.some(mime => contentType.startsWith(mime))) {
       return originResponse; // Return original response without caching
     }
 
-    // We need to clone the response to be able to read its body for caching
-    // and still return the original response to the client.
     const responseToCache = originResponse.clone();
 
     const headers = {};
@@ -149,12 +162,10 @@ async function fetchAndCache(request, cacheKey, cached, config) {
       expires: Date.now() + (config.ttl * 1000),
     };
 
-    // Store the cache data as a JSON string.
     if (!cached || cached.body !== cacheData.body) { // Avoid redundant writes
       await FPC_CACHE.put(cacheKey, JSON.stringify(cacheData));
     }
 
-    // Return the original response. Its body is still intact and can be streamed.
     return originResponse;
   }
 

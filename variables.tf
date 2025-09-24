@@ -26,5 +26,5 @@ variable "bypass_static" {
 variable "bypass_media" {
   description = "If true, create a bypass route for /media/* so the worker is not applied to media assets."
   type        = bool
-  default     = false
+  default     = true
 }
