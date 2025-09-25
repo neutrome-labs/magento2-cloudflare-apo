@@ -2,6 +2,57 @@ addEventListener('fetch', event => {
   event.respondWith(handleRequest(event));
 });
 
+const CONFIG = {
+  defaultTtl: 3600,
+  graceSeconds: 3 * 24 * 3600,
+  respectPrivateNoCache: false,
+  respectCacheControl: false,
+  hitForPassSeconds: 120,
+  cacheLoggedIn: true,
+  debug: false,
+  returnClaims: true,
+  purgeSecret: 'replace-me',
+  staticPathPattern: /^\/(?:pub\/)?(?:media|static)\//,
+  healthCheckPattern: /^\/(?:pub\/)?health_check\.php$/,
+  marketingParams: [
+    'gclid', 'cx', 'ie', 'cof', 'siteurl', 'zanpid', 'origin', 'fbclid',
+    'mc_*', 'utm_*', '_bta_*'
+  ],
+  excludedPaths: [
+    '/admin',
+    '/customer',
+    '/checkout',
+    '/wishlist',
+    '/cart',
+    '/sales',
+    '/rest/',
+    '/onestepcheckout',
+    '/password'
+  ],
+  graphqlPath: '/graphql',
+  varyCookies: ['X-Magento-Vary'],
+  allowedCookieNames: [
+    'X-Magento-Vary',
+    'store',
+    'currency',
+    'form_key',
+    'private_content_version',
+    'section_data_ids',
+    'mage-cache-sessid',
+    'mage-cache-storage',
+    'mage-cache-storage-section-invalidation',
+    'mage-messages'
+  ],
+  includedResponseTypes: [
+    'text/html',
+    'text/css',
+    'text/javascript',
+    'application/javascript',
+    // 'application/json'
+  ]
+};
+
+const CACHE_PREFIX = 'fpc:';
 
 function debugLog(config, ...args) {
   if (config && config.debug) {
@@ -9,324 +60,532 @@ function debugLog(config, ...args) {
   }
 }
 
-
 async function handleRequest(event) {
   const request = event.request;
-  const config = {
-    "ttl": 3600,
-    "grace": 3600*9,
-    "cache_logged_in": true,
-    "purge_secret": "true",
-    "debug": false,
-    "return_claims": false,
-    "included_mimetypes": [
-      "text/html",
-      "text/css",
-      "text/javascript",
-      "application/javascript",
-      "font/",
-      "image/svg"
-    ],
-    "excluded_paths": [
-      "/admin",
-      "/customer",
-      "/account",
-      "/checkout",
-      "/wishlist",
-      "/cart",
-      "/sales",
-      "/graphql",
-      "/rest/",
-      "/onestepcheckout",
-      "/password",
-    ],
-    "vary_on_params": "*",
-    "ignored_params": [
-      "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
-      "gclid", "dclid", "fbclid", "msclkid", "yclid", "icid", "gclsrc",
-      "mc_cid", "mc_eid", "_bta_tid", "_bta_c",
-      "_ga", "_gl", "_gid", "_gac", "ga_source", "ga_medium",
-      "ref", "referrer"
-    ],
-    "vary_on_headers": [],
-    "vary_on_cookies": ["X-Magento-Vary"]
-  };
+  const config = CONFIG;
+  const claims = [];
+  const context = createContext(request, config, claims);
 
-  debugLog(config, `Request: ${request.method} ${new URL(request.url).href}`);
-  const execClaims = Array.isArray(config.claims) ? [...config.claims] : [];
+  debugLog(config, `Request ${request.method} ${context.originalUrl}`);
 
-  const bypass = shouldBypassCache(request, config, execClaims);
+  if (request.method === 'POST' && request.headers.get('X-Purge-Secret')) {
+    const purgeResponse = await handlePurgeRequest(context);
+    return withClaimsHeader(purgeResponse, config, claims);
+  }
+
+  const bypass = shouldBypass(context);
   if (bypass.bypass) {
-    debugLog(config, `Bypass cache -> reason: ${bypass.reason || 'unspecified'}`);
-    const origin = await fetch(request);
-    return withClaimsHeader(origin, config, execClaims);
+    claims.push(`bypass:${bypass.reason}`);
+    const response = await fetchFromOrigin(context, event, { tag: 'pass' });
+    return withClaimsHeader(finalizeResponse(response, context, 'UNCACHEABLE'), config, claims);
   }
 
-  const cacheKey = await getCacheKey(request, config);
-  debugLog(config, `Computed cache key: ${cacheKey}`);
+  const cacheKey = await computeCacheKey(context);
+  context.cacheKey = cacheKey;
+  debugLog(config, `Cache key => ${cacheKey}`);
 
-  if (request.method === 'POST' && request.headers.get('X-Purge-Cache') === config.purge_secret) {
-    debugLog(config, `Purge requested for key: ${cacheKey}`);
-    return handlePurgeRequest(cacheKey, config);
+  const record = await readCacheRecord(cacheKey);
+  const now = Date.now();
+
+  if (record && record.state === 'pass' && record.expires > now) {
+    debugLog(config, `Hit-for-pass active (${record.expires - now}ms remaining)`);
+    claims.push('cache:hfp');
+    const response = await fetchFromOrigin(context, event, { tag: 'pass-active' });
+    return withClaimsHeader(finalizeResponse(response, context, 'UNCACHEABLE'), config, claims);
   }
 
-  const cached = await FPC_CACHE.get(cacheKey, { type: 'json' });
+  if (record && record.state === 'cache') {
+    if (record.expires > now) {
+      debugLog(config, `Cache HIT, ttl left ${(record.expires - now) / 1000 | 0}s`);
+      claims.push('cache:hit');
+      const response = buildCachedResponse(record, context, 'HIT');
+      return withClaimsHeader(response, config, claims);
+    }
 
-  if (cached && cached.expires > Date.now()) {
-    execClaims.push('cache:hit');
-    const headers = { ...cached.headers, 'X-FPC-Cache': 'HIT' };
-    debugLog(config, `Cache HIT for key: ${cacheKey}. Expires in ${(cached.expires - Date.now())/1000 | 0}s`);
-    const response = request.method === 'HEAD'
-      ? new Response(null, { headers })
-      : new Response(cached.body, { headers });
-    return withClaimsHeader(response, config, execClaims);
+    if (record.staleUntil > now) {
+      debugLog(config, `Cache STALE deliver, grace left ${(record.staleUntil - now) / 1000 | 0}s`);
+      claims.push('cache:stale');
+      event.waitUntil(revalidate(event, context, record));
+      const response = buildCachedResponse(record, context, 'STALE');
+      return withClaimsHeader(response, config, claims);
+    }
+
+    debugLog(config, 'Cached record expired beyond grace, treating as miss');
   }
 
-  if (cached) {
-    execClaims.push('cache:stale');
-    event.waitUntil(fetchAndCache(request, cacheKey, cached, config));
-    const headers = { ...cached.headers, 'X-FPC-Cache': 'STALE' };
-    debugLog(config, `Cache STALE for key: ${cacheKey}. Stale age ${(Date.now() - cached.expires)/1000 | 0}s`);
-    const response = request.method === 'HEAD'
-      ? new Response(null, { headers })
-      : new Response(cached.body, { headers });
-    return withClaimsHeader(response, config, execClaims);
+  const { response, cacheResult, skipCache, uncacheableReason } = await fetchCacheableResponse(event, context, record);
+
+  if (cacheResult) {
+    await writeCacheRecord(cacheKey, cacheResult);
+    claims.push('cache:write');
+  } else if (skipCache && uncacheableReason === 'hit-for-pass') {
+    await storeHitForPass(cacheKey, context);
+    claims.push('cache:hfp-store');
   }
 
-  const response = await fetchAndCache(request, cacheKey, cached, config);
-
-  const headers = new Headers(response.headers);
-  headers.set('X-FPC-Cache', 'MISS');
-  execClaims.push('cache:miss');
-  debugLog(config, `Cache MISS for key: ${cacheKey}`);
-
-  const finalResponse = request.method === 'HEAD' 
-    ? new Response(null, { status: response.status, statusText: response.statusText, headers })
-    : new Response(response.body, { status: response.status, statusText: response.statusText, headers });
-
-  return withClaimsHeader(finalResponse, config, execClaims);
+  claims.push('cache:miss');
+  const finalized = finalizeResponse(response, context, skipCache ? 'UNCACHEABLE' : 'MISS');
+  return withClaimsHeader(finalized, config, claims);
 }
 
-
-function shouldBypassCache(request, config, claims) {
+function createContext(request, config, claims) {
   const url = new URL(request.url);
+  const normalized = normalizeUrl(url, config, claims);
+  const headers = request.headers;
+  const isGraphql = normalized.pathname.startsWith(config.graphqlPath);
+  const magentoCacheId = headers.get('X-Magento-Cache-Id') || '';
+  const authHeader = headers.get('Authorization') || '';
+  const store = headers.get('Store') || headers.get('X-Store') || '';
+  const currency = headers.get('Content-Currency') || headers.get('X-Currency') || '';
+
+  return {
+    request,
+    config,
+    claims,
+    originalUrl: url.href,
+    url: normalized.url,
+    pathname: normalized.pathname,
+    search: normalized.search,
+    marketingRemoved: normalized.marketingRemoved,
+    cookieHeader: headers.get('Cookie') || '',
+    sslOffloaded: headers.get('CF-Visitor') || headers.get('X-Forwarded-Proto') || '',
+    isStatic: config.staticPathPattern.test(normalized.pathname),
+    isHealthCheck: config.healthCheckPattern.test(normalized.pathname),
+    isGraphql,
+    magentoCacheId,
+    hasAuthToken: /^Bearer\s+/i.test(authHeader),
+    authHeader,
+    store,
+    currency,
+    cacheKey: null
+  };
+}
+
+function normalizeUrl(url, config, claims) {
+  const normalized = new URL(url.href);
+  const marketingRemoved = stripMarketingParams(normalized, config);
+  const pathname = normalized.pathname;
+  const search = normalized.search;
+
+  if (marketingRemoved.length) {
+    claims.push(`strip_params:${marketingRemoved.join(',')}`);
+  }
+
+  return { url: normalized, pathname, search, marketingRemoved };
+}
+
+function stripMarketingParams(url, config) {
+  const removed = [];
+  const params = url.searchParams;
+  if (!params || Array.from(params.keys()).length === 0) {
+    return removed;
+  }
+
+  const patterns = config.marketingParams || [];
+  const keys = Array.from(params.keys());
+  for (const key of keys) {
+    if (patterns.some(pattern => matchesPattern(key, pattern))) {
+      removed.push(key);
+      params.delete(key);
+    }
+  }
+
+  if (params.toString()) {
+    url.search = `?${params.toString()}`;
+  } else {
+    url.search = '';
+  }
+
+  return removed;
+}
+
+function matchesPattern(value, pattern) {
+  if (!pattern) return false;
+  if (pattern.endsWith('*')) {
+    return value.toLowerCase().startsWith(pattern.slice(0, -1).toLowerCase());
+  }
+  return value.toLowerCase() === pattern.toLowerCase();
+}
+
+function shouldBypass(context) {
+  const { request, config, isGraphql, hasAuthToken, magentoCacheId, pathname, isStatic, isHealthCheck } = context;
 
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    debugLog(config, `Bypass reason matched: method is ${request.method} (only GET/HEAD cached)`);
-    const reason = `method:${request.method}`;
-    claims && claims.push(`bypass:${reason}`);
-    return { bypass: true, reason };
+    return { bypass: true, reason: `method:${request.method}` };
   }
 
-  const authz = request.headers.get('Authorization');
-  if (authz) {
-    debugLog(config, 'Bypass reason matched: Authorization header present');
-    claims && claims.push('bypass:authz');
-    return { bypass: true, reason: 'authz' };
+  if (request.method === 'HEAD' && request.headers.get('Range')) {
+    return { bypass: true, reason: 'range-head' };
   }
 
-  const matchedPath = (config.excluded_paths || []).find(path => url.pathname.includes(path));
-  if (matchedPath) {
-    debugLog(config, `Bypass reason matched: excluded_paths contains '${matchedPath}' for pathname '${url.pathname}'`);
-    claims && claims.push(`bypass:excluded_path:${matchedPath}`);
-    return { bypass: true, reason: `excluded_path:${matchedPath}` };
+  if (isHealthCheck) {
+    return { bypass: true, reason: 'health-check' };
   }
 
-  return { bypass: false };
+  if (isStatic) {
+    return { bypass: true, reason: 'static-path' };
+  }
+
+  if (config.excludedPaths.some(path => pathname.startsWith(path))) {
+    return { bypass: true, reason: 'excluded-path' };
+  }
+
+  if (isGraphql && hasAuthToken && !magentoCacheId) {
+    return { bypass: true, reason: 'graphql-auth-pass' };
+  }
+
+  return { bypass: false, reason: '' };
 }
 
-function withClaimsHeader(response, config, claims) {
-  if (!config.return_claims) return response;
-  if (!Array.isArray(claims) || claims.length === 0) return response;
+async function computeCacheKey(context) {
+  const { url, config, magentoCacheId, isGraphql, cookieHeader, sslOffloaded, store, currency } = context;
+  const hostname = url.hostname;
+  const pathname = url.pathname;
+  const params = url.searchParams;
 
-  const seen = new Set();
-  const ordered = [];
-  for (const c of claims) {
-    if (!seen.has(c)) { seen.add(c); ordered.push(c); }
+  let key = `${CACHE_PREFIX}${hostname}${pathname}`;
+
+  if ([...params.keys()].length) {
+    const pairs = [...params.entries()].sort(([a], [b]) => a.localeCompare(b));
+    if (pairs.length) {
+      key += `?${pairs.map(([k, v]) => `${k}=${v}`).join('&')}`;
+    }
   }
 
-  const headers = new Headers(response.headers);
-  headers.set('X-APO-Claims', ordered.join(','));
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
-}
-
-
-async function getCacheKey(request, config) {
-  const url = new URL(request.url);
-  let key = `fpc:${url.hostname}${url.pathname}`;
-
-  const params = new URLSearchParams(url.search);
-  const allKeys = Array.from(params.keys());
-  let selectedPairs = [];
-
-  const isAll = typeof config.vary_on_params === 'string' && config.vary_on_params.trim() === '*';
-  if (isAll) {
-    const ignored = new Set(
-      (config.ignored_params || []).map(p => String(p).toLowerCase())
-    );
-    const keptKeys = allKeys
-      .filter(k => !ignored.has(k.toLowerCase()))
-      .sort((a, b) => a.localeCompare(b));
-    for (const k of keptKeys) {
-      selectedPairs.push(`${k}=${params.get(k)}`);
+  if (isGraphql && magentoCacheId) {
+    key += `::graphql:${magentoCacheId}`;
+    if (context.hasAuthToken) {
+      key += ':authorized';
     }
-    debugLog(config, `Vary params mode='*'. kept=${JSON.stringify(keptKeys)}, ignored=${JSON.stringify(Array.from(ignored))}`);
-  } else if (Array.isArray(config.vary_on_params) && config.vary_on_params.length > 0) {
-    const paramKeys = allKeys;
-    for (const p of config.vary_on_params) {
-      const matchKey = paramKeys.find(k => k.toLowerCase() === String(p).toLowerCase());
-      if (matchKey) {
-        selectedPairs.push(`${matchKey}=${params.get(matchKey)}`);
-      }
+  } else {
+    const varyCookie = extractCookieValue(cookieHeader, config.varyCookies || []);
+    if (varyCookie) {
+      key += `::vary:${varyCookie}`;
     }
-    debugLog(config, `Vary params explicit. used=${JSON.stringify(selectedPairs.map(p => p.split('=')[0]))}`);
   }
 
-  if (selectedPairs.length > 0) {
-    key += `?${selectedPairs.join('&')}`;
+  if (sslOffloaded) {
+    key += `::ssl:${sslOffloaded}`;
   }
 
-  if (Array.isArray(config.vary_on_cookies) && config.vary_on_cookies.length > 0) {
-    const cookieHeader = request.headers.get('Cookie') || '';
-    const cookies = cookieHeader.split(';').map(c => c.trim());
-    let varyValues = [];
-    for (const cookieName of config.vary_on_cookies) {
-      const found = cookies.find(c => c.split('=')[0].trim().toLowerCase() === cookieName.toLowerCase());
-      if (found) {
-        varyValues.push(found.split('=')[1]);
-      } else {
-        varyValues.push('');
-      }
+  if (isGraphql) {
+    if (store) {
+      key += `::store:${store}`;
     }
-    if (varyValues.length > 0) {
-      key += `#${varyValues.join('_')}`;
+    if (currency) {
+      key += `::currency:${currency}`;
     }
-    debugLog(config, `Vary cookies: names=${JSON.stringify(config.vary_on_cookies)}, values=${JSON.stringify(varyValues)}`);
-  }
-
-  if (Array.isArray(config.vary_on_headers) && config.vary_on_headers.length > 0) {
-    let headerValues = [];
-    for (const headerName of config.vary_on_headers) {
-      const value = request.headers.get(headerName);
-      headerValues.push(value || '');
-    }
-    if (headerValues.length > 0) {
-      key += `@${headerValues.join('_')}`;
-    }
-    debugLog(config, `Vary headers: names=${JSON.stringify(config.vary_on_headers)}, values=${JSON.stringify(headerValues)}`);
   }
 
   return key;
 }
 
+function extractCookieValue(cookieHeader, names) {
+  if (!cookieHeader || !Array.isArray(names) || names.length === 0) {
+    return '';
+  }
+  const cookies = cookieHeader.split(';').map(chunk => chunk.trim()).filter(Boolean);
+  const wanted = [];
+  for (const name of names) {
+    const found = cookies.find(cookie => cookie.toLowerCase().startsWith(`${name.toLowerCase()}=`));
+    if (found) {
+      wanted.push(found.split('=')[1] || '');
+    }
+  }
+  return wanted.join('_');
+}
 
-async function fetchAndCache(request, cacheKey, cached, config) {
-  const reqUrl = new URL(request.url);
-  const isStaticAsset = /\.(?:css|js|mjs|json|map|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot)(?:\?.*)?$/i.test(reqUrl.pathname);
-  const isExcludedPath = (config.excluded_paths || []).some(path => reqUrl.pathname.includes(path));
-  const isCacheableHtmlPath = !isStaticAsset && !isExcludedPath;
+async function readCacheRecord(cacheKey) {
+  const raw = await FPC_CACHE.get(cacheKey, 'json');
+  if (!raw) return null;
+  return raw;
+}
 
-  const cookieHeader = request.headers.get('Cookie') || '';
-  let sanitizedRequest = request;
+function buildCachedResponse(record, context, status) {
+  const headers = new Headers(record.headers || {});
+  headers.set('X-FPC-Cache', status);
+  if (status === 'STALE') {
+    headers.set('X-FPC-Grace', 'normal');
+  }
+  headers.set('X-Magento-Cache-Debug', status === 'HIT' || status === 'STALE' ? 'HIT' : status);
+  const responseInit = { status: record.status, statusText: record.statusText, headers };
+  const body = record.body ?? '';
+  const response = context.request.method === 'HEAD'
+    ? new Response(null, responseInit)
+    : new Response(body, responseInit);
+  return finalizeResponse(response, context, status, { fromCache: true, record });
+}
+
+async function revalidate(event, context, record) {
+  try {
+    await fetchCacheableResponse(event, context, record);
+  } catch (err) {
+    debugLog(context.config, 'Revalidate error', err);
+  }
+}
+
+async function fetchCacheableResponse(event, context, previousRecord) {
+  const response = await fetchFromOrigin(context, event);
+  const clone = response.clone();
+  const { config } = context;
+
+  const status = clone.status;
+  const headers = new Headers(clone.headers);
+  const cacheControl = headers.get('Cache-Control') || '';
+  const surrogate = headers.get('Surrogate-Control') || '';
+  const vary = headers.get('Vary') || '';
+  const setCookie = headers.get('Set-Cookie');
+
+  if ((status !== 200 && status !== 404) || /private/i.test(cacheControl)) {
+    return { response, skipCache: true, uncacheableReason: 'status' };
+  }
+
+  const noStoreHeader = /no-store/i.test(cacheControl) || /no-cache/i.test(cacheControl) || /no-store/i.test(surrogate);
+  if ((context.config.respectPrivateNoCache && noStoreHeader) || vary === '*') {
+    debugLog(config, `Marking hit-for-pass: cache-control='${cacheControl}' surrogate='${surrogate}' vary='${vary}'`);
+    return { response, skipCache: true, uncacheableReason: 'hit-for-pass' };
+  }
+
+  if (setCookie) {
+    headers.delete('Set-Cookie');
+  }
+
+  if (headers.get('X-Magento-Debug')) {
+    headers.set('X-Magento-Cache-Control', cacheControl || '');
+  }
+
+  let ttlSeconds = deriveTtl(cacheControl, config);
+  if (ttlSeconds <= 0) {
+    ttlSeconds = config.defaultTtl;
+  }
+
+  const bodyText = await clone.text();
+  if (bodyText.length < 3) {
+    return { response, skipCache: true, uncacheableReason: 'body-too-small' };
+  }
+
+  if (context.isGraphql && context.magentoCacheId) {
+    const responseCacheId = headers.get('X-Magento-Cache-Id');
+    if (responseCacheId && responseCacheId !== context.magentoCacheId) {
+      debugLog(config, `GraphQL cache-id mismatch request=${context.magentoCacheId} response=${responseCacheId}`);
+      return { response, skipCache: true, uncacheableReason: 'graphql-mismatch' };
+    }
+  }
+
+  const expires = Date.now() + ttlSeconds * 1000;
+  const staleUntil = expires + context.config.graceSeconds * 1000;
+  const statusText = clone.statusText || '';
+  const responseHeaders = sanitizeHeaders(headers, context);
+
+  const cacheRecord = {
+    state: 'cache',
+    status,
+    statusText,
+    headers: responseHeaders,
+    body: bodyText,
+    expires,
+    staleUntil
+  };
+
+  return { response, cacheResult: cacheRecord };
+}
+
+async function fetchFromOrigin(context, event, metadata = {}) {
+  const request = buildOriginRequest(context);
+  const response = await fetch(request);
+  if (metadata.tag) {
+    debugLog(context.config, `Origin fetch metadata tag=${metadata.tag}`);
+  }
+  return response;
+}
+
+function buildOriginRequest(context) {
+  const { request, url, config, isStatic, cookieHeader } = context;
+  const headers = new Headers(request.headers);
+
   if (cookieHeader) {
-    const headers = new Headers(request.headers);
-    if (isStaticAsset) {
+    if (isStatic) {
       headers.delete('Cookie');
     } else {
-      const allowlist = [
-        'X-Magento-Vary',
-        'store',
-        'currency',
-        'form_key',
-        'private_content_version',
-        'section_data_ids',
-        'mage-cache-sessid',
-        'mage-cache-storage',
-        'mage-cache-storage-section-invalidation'
-      ];
-
-      if (config.cache_logged_in && isCacheableHtmlPath) {
-        allowlist.push('PHPSESSID');
+      const allowlist = new Set(config.allowedCookieNames.map(name => name.toLowerCase()));
+      const parsed = cookieHeader.split(';').map(chunk => chunk.trim()).filter(Boolean);
+      const kept = [];
+      for (const piece of parsed) {
+        const name = piece.split('=')[0].trim().toLowerCase();
+        if (allowlist.has(name) || (config.cacheLoggedIn && name === 'phpsessid')) {
+          kept.push(piece);
+        }
       }
-
-      const parsed = cookieHeader.split(';').map(c => c.trim());
-
-      const kept = parsed.filter(c => {
-        const name = c.split('=')[0].trim();
-        return allowlist.some(a => a.toLowerCase() === name.toLowerCase());
-      });
-
-      if (kept.length > 0) {
+      if (kept.length) {
         headers.set('Cookie', kept.join('; '));
       } else {
         headers.delete('Cookie');
       }
     }
-    sanitizedRequest = new Request(request, { headers });
   }
 
-  const originResponse = await fetch(sanitizedRequest);
+  const init = {
+    method: request.method,
+    headers,
+    body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+    redirect: request.redirect,
+    cf: request.cf,
+    signal: request.signal
+  };
 
-  if (originResponse.ok && request.method === 'GET') {
-    const contentType = originResponse.headers.get('Content-Type') || '';
-    debugLog(config, `Origin response: status=${originResponse.status}, content-type='${contentType}'`);
-
-    if (!config.included_mimetypes.some(mime => contentType.startsWith(mime))) {
-      debugLog(config, `Skip caching: content-type '${contentType}' not in included_mimetypes ${JSON.stringify(config.included_mimetypes)}`);
-      return originResponse; // Return original response without caching
-    }
-
-    const responseToCache = originResponse.clone();
-
-    const headers = {};
-    for (let [key, value] of responseToCache.headers.entries()) {
-      headers[key] = value;
-    }
-
-    if (/^text\/html/i.test(contentType) && responseToCache.headers.has('Set-Cookie')) {
-      debugLog(config, `Skip caching: HTML response with Set-Cookie header`);
-      return originResponse;
-    }
-
-    /*
-    const cc = responseToCache.headers.get('Cache-Control') || '';
-    if (/(?:no-store|private|no-cache)/i.test(cc)) {
-      debugLog(config, `Skip caching: Cache-Control indicates non-cacheable -> '${cc}'`);
-      return originResponse;
-    }
-    */
-
-    const body = await responseToCache.text();
-    if (body.length < 3) {
-      debugLog(config, `Skip caching: body too small (length=${body.length})`);
-      return originResponse;
-    }
-
-    const cacheData = {
-      body: body,
-      headers: headers,
-      expires: Date.now() + (config.ttl * 1000),
-    };
-
-    if (!cached || cached.body !== cacheData.body) { // Avoid redundant writes
-      debugLog(config, `Writing to cache. key=${cacheKey}, ttl=${config.ttl}s, grace=${config.grace}s, bodyLen=${body.length}`);
-      await FPC_CACHE.put(cacheKey, JSON.stringify(cacheData), { expirationTtl: config.ttl + config.grace });
-    } else {
-      debugLog(config, `Skip cache write: body unchanged for key=${cacheKey}`);
-    }
-
-    return originResponse;
-  }
-
-  return originResponse;
+  return new Request(url.toString(), init);
 }
 
-
-async function handlePurgeRequest(cacheKey, config) {
-  if (!cacheKey) {
-    return new Response('Cache key not provided', { status: 400 });
+function deriveTtl(cacheControl, config) {
+  if (!config.respectCacheControl || !cacheControl) {
+    return config.defaultTtl;
   }
-  await FPC_CACHE.delete(cacheKey);
-  debugLog(config, `Purged cache key=${cacheKey}`);
-  return new Response('Cache purged', { status: 200 });
+  const sMaxAgeMatch = cacheControl.match(/s-maxage=(\d+)/i);
+  if (sMaxAgeMatch) {
+    return parseInt(sMaxAgeMatch[1], 10);
+  }
+  const maxAgeMatch = cacheControl.match(/max-age=(\d+)/i);
+  if (maxAgeMatch) {
+    return parseInt(maxAgeMatch[1], 10);
+  }
+  return config.defaultTtl;
+}
+
+function sanitizeHeaders(headers, context) {
+  const sanitized = {};
+  headers.forEach((value, key) => {
+    if (['age', 'x-powered-by', 'server', 'via', 'x-varnish', 'link'].includes(key.toLowerCase())) {
+      return;
+    }
+    if (context.isStatic && key.toLowerCase() === 'cache-control') {
+      sanitized[key] = value;
+      return;
+    }
+    sanitized[key] = value;
+  });
+  return sanitized;
+}
+
+function finalizeResponse(response, context, cacheState, options = {}) {
+  const headers = new Headers(response.headers);
+  const isStatic = context.isStatic;
+
+  if (!headers.has('X-Magento-Cache-Debug')) {
+    headers.set('X-Magento-Cache-Debug', cacheState === 'UNCACHEABLE' ? 'UNCACHEABLE' : cacheState);
+  }
+
+  headers.set('X-FPC-Cache', cacheState);
+
+  if (cacheState === 'STALE') {
+    headers.set('X-FPC-Grace', 'normal');
+  }
+
+  if (cacheState === 'UNCACHEABLE') {
+    headers.delete('X-FPC-Grace');
+  }
+
+  if (!isStatic && (!headers.get('Cache-Control') || !/private/i.test(headers.get('Cache-Control')))) {
+    headers.set('Pragma', 'no-cache');
+    headers.set('Expires', '-1');
+    headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  }
+
+  if (!headers.has('X-Magento-Debug')) {
+    headers.delete('Age');
+  }
+
+  headers.delete('X-Magento-Debug');
+  headers.delete('X-Magento-Tags');
+  headers.delete('X-Pool');
+  headers.delete('X-Powered-By');
+  headers.delete('Server');
+  headers.delete('X-Varnish');
+  headers.delete('Via');
+  headers.delete('Link');
+
+  const init = {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  };
+
+  return context.request.method === 'HEAD'
+    ? new Response(null, init)
+    : new Response(response.body, init);
+}
+
+async function writeCacheRecord(cacheKey, record) {
+  const ttlSeconds = Math.max(60, Math.ceil((record.staleUntil - Date.now()) / 1000));
+  await FPC_CACHE.put(cacheKey, JSON.stringify(record), {
+    expirationTtl: ttlSeconds
+  });
+}
+
+async function storeHitForPass(cacheKey, context) {
+  const ttlSeconds = Math.max(1, context.config.hitForPassSeconds);
+  const record = {
+    state: 'pass',
+    expires: Date.now() + ttlSeconds * 1000
+  };
+  await FPC_CACHE.put(cacheKey, JSON.stringify(record), { expirationTtl: ttlSeconds });
+}
+
+async function handlePurgeRequest(context) {
+  const { request, config } = context;
+  const providedSecret = request.headers.get('X-Purge-Secret') || '';
+
+  if (!config.purgeSecret || providedSecret !== config.purgeSecret) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  const headerKey = request.headers.get('X-Cache-Key');
+  let keys = [];
+
+  if (headerKey) {
+    keys.push(headerKey);
+  } else {
+    const bodyText = await request.text();
+    if (bodyText) {
+      try {
+        const payload = JSON.parse(bodyText);
+        if (Array.isArray(payload)) {
+          keys = payload;
+        } else if (Array.isArray(payload.keys)) {
+          keys = payload.keys;
+        } else if (typeof payload.key === 'string') {
+          keys = [payload.key];
+        }
+      } catch (err) {
+        return new Response('Invalid JSON payload', { status: 400 });
+      }
+    }
+  }
+
+  keys = keys.filter(key => typeof key === 'string' && key.length > 0);
+
+  if (!keys.length) {
+    return new Response('Cache key required', { status: 400 });
+  }
+
+  await Promise.all(keys.map(key => FPC_CACHE.delete(key)));
+  return new Response(`Purged ${keys.length} keys`, { status: 200 });
+}
+
+function withClaimsHeader(response, config, claims) {
+  if (!config.returnClaims) {
+    return response;
+  }
+
+  const unique = [...new Set(claims.filter(Boolean))];
+  if (!unique.length) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set('X-APO-Claims', unique.join('|'));
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
 }
