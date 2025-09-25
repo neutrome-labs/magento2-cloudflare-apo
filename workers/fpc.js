@@ -13,11 +13,12 @@ function debugLog(config, ...args) {
 async function handleRequest(event) {
   const request = event.request;
   const config = {
-    "debug": false,
     "ttl": 3600,
     "grace": 3600*9,
     "cache_logged_in": true,
     "purge_secret": "true",
+    "debug": false,
+    "return_claims": false,
     "included_mimetypes": [
       "text/html",
       "text/css",
@@ -29,6 +30,7 @@ async function handleRequest(event) {
     "excluded_paths": [
       "/admin",
       "/customer",
+      "/account",
       "/checkout",
       "/wishlist",
       "/cart",
@@ -51,11 +53,13 @@ async function handleRequest(event) {
   };
 
   debugLog(config, `Request: ${request.method} ${new URL(request.url).href}`);
+  const execClaims = Array.isArray(config.claims) ? [...config.claims] : [];
 
-  const bypass = shouldBypassCache(request, config);
+  const bypass = shouldBypassCache(request, config, execClaims);
   if (bypass.bypass) {
     debugLog(config, `Bypass cache -> reason: ${bypass.reason || 'unspecified'}`);
-    return fetch(request);
+    const origin = await fetch(request);
+    return withClaimsHeader(origin, config, execClaims);
   }
 
   const cacheKey = await getCacheKey(request, config);
@@ -69,63 +73,81 @@ async function handleRequest(event) {
   const cached = await FPC_CACHE.get(cacheKey, { type: 'json' });
 
   if (cached && cached.expires > Date.now()) {
+    execClaims.push('cache:hit');
     const headers = { ...cached.headers, 'X-FPC-Cache': 'HIT' };
     debugLog(config, `Cache HIT for key: ${cacheKey}. Expires in ${(cached.expires - Date.now())/1000 | 0}s`);
-    return request.method === 'HEAD'
+    const response = request.method === 'HEAD'
       ? new Response(null, { headers })
       : new Response(cached.body, { headers });
+    return withClaimsHeader(response, config, execClaims);
   }
 
   if (cached) {
+    execClaims.push('cache:stale');
     event.waitUntil(fetchAndCache(request, cacheKey, cached, config));
     const headers = { ...cached.headers, 'X-FPC-Cache': 'STALE' };
     debugLog(config, `Cache STALE for key: ${cacheKey}. Stale age ${(Date.now() - cached.expires)/1000 | 0}s`);
-    return request.method === 'HEAD'
+    const response = request.method === 'HEAD'
       ? new Response(null, { headers })
       : new Response(cached.body, { headers });
+    return withClaimsHeader(response, config, execClaims);
   }
 
   const response = await fetchAndCache(request, cacheKey, cached, config);
 
   const headers = new Headers(response.headers);
   headers.set('X-FPC-Cache', 'MISS');
+  execClaims.push('cache:miss');
   debugLog(config, `Cache MISS for key: ${cacheKey}`);
 
-  return request.method === 'HEAD' 
-    ? new Response(null, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: headers
-    })
-    : new Response(response.body, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: headers
-    });
+  const finalResponse = request.method === 'HEAD' 
+    ? new Response(null, { status: response.status, statusText: response.statusText, headers })
+    : new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+
+  return withClaimsHeader(finalResponse, config, execClaims);
 }
 
 
-function shouldBypassCache(request, config) {
+function shouldBypassCache(request, config, claims) {
   const url = new URL(request.url);
 
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     debugLog(config, `Bypass reason matched: method is ${request.method} (only GET/HEAD cached)`);
-    return { bypass: true, reason: `method:${request.method}` };
+    const reason = `method:${request.method}`;
+    claims && claims.push(`bypass:${reason}`);
+    return { bypass: true, reason };
   }
 
   const authz = request.headers.get('Authorization');
   if (authz) {
     debugLog(config, 'Bypass reason matched: Authorization header present');
+    claims && claims.push('bypass:authz');
     return { bypass: true, reason: 'authz' };
   }
 
   const matchedPath = (config.excluded_paths || []).find(path => url.pathname.includes(path));
   if (matchedPath) {
     debugLog(config, `Bypass reason matched: excluded_paths contains '${matchedPath}' for pathname '${url.pathname}'`);
+    claims && claims.push(`bypass:excluded_path:${matchedPath}`);
     return { bypass: true, reason: `excluded_path:${matchedPath}` };
   }
 
   return { bypass: false };
+}
+
+function withClaimsHeader(response, config, claims) {
+  if (!config.return_claims) return response;
+  if (!Array.isArray(claims) || claims.length === 0) return response;
+
+  const seen = new Set();
+  const ordered = [];
+  for (const c of claims) {
+    if (!seen.has(c)) { seen.add(c); ordered.push(c); }
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set('X-APO-Claims', ordered.join(','));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 
