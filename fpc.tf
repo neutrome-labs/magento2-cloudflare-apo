@@ -24,16 +24,9 @@ resource "cloudflare_workers_route" "fpc_route" {
 }
 
 # Optional bypass routes: when enabled, these routes will NOT attach the worker (script = "")
-resource "cloudflare_workers_route" "bypass_static" {
-  count   = var.bypass_static ? 1 : 0
-  zone_id = data.cloudflare_zones.zone.result[0].id
-  pattern = "${var.subdomain != "" ? "${var.subdomain}." : ""}${var.zone_name}/static/*"
-  script  = ""
-}
-
-resource "cloudflare_workers_route" "bypass_media" {
-  count   = var.bypass_media ? 1 : 0
-  zone_id = data.cloudflare_zones.zone.result[0].id
-  pattern = "${var.subdomain != "" ? "${var.subdomain}." : ""}${var.zone_name}/media/*"
-  script  = ""
+resource "cloudflare_workers_route" "bypass" {
+  for_each = toset(var.bypass_routes)
+  zone_id  = data.cloudflare_zones.zone.result[0].id
+  pattern  = "${var.subdomain != "" ? "${var.subdomain}." : ""}${var.zone_name}/${each.value}/*"
+  script   = null
 }

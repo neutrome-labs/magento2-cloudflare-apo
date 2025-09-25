@@ -16,8 +16,8 @@ async function handleRequest(event) {
     "debug": false,
     "ttl": 3600,
     "grace": 3600*9,
-    "purge_secret": "true",
     "cache_logged_in": true,
+    "purge_secret": "true",
     "included_mimetypes": [
       "text/html",
       "text/css",
@@ -35,10 +35,6 @@ async function handleRequest(event) {
       "/sales",
       "/graphql",
       "/rest/",
-      "/customer/section/",
-      "/customer/account",
-      "/customer/address",
-      "/customer/orders",
       "/onestepcheckout",
       "/password",
     ],
@@ -50,7 +46,7 @@ async function handleRequest(event) {
       "_ga", "_gl", "_gid", "_gac", "ga_source", "ga_medium",
       "ref", "referrer"
     ],
-    "vary_on_headers": ["x-magento-tags"],
+    "vary_on_headers": [],
     "vary_on_cookies": ["X-Magento-Vary"]
   };
 

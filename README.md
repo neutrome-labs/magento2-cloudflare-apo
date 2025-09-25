@@ -8,7 +8,7 @@ This Terraform module deploys a Cloudflare Worker to act as a Full Page Cache (F
 - **Dynamic Cookie/Header-based Cache Bypass:** Automatically bypasses the cache for users with active sessions or items in their cart.
 - **Secure Purging:** Includes a secure endpoint to purge the cache for a specific URL.
 - **Cache Status Headers:** Adds `X-FPC-Cache` (HIT, MISS, STALE) headers to responses for easy debugging.
-- **Optional Bypass Routes:** Toggle variables to bypass the worker for asset paths like `/static/*` and `/media/*`.
+- **Configurable Bypass Routes:** Provide a list of path prefixes (e.g. `static`, `media`, `rest`, `graphql`) where the worker is bypassed.
 
 ## How to Use
 
@@ -33,9 +33,9 @@ This Terraform module deploys a Cloudflare Worker to act as a Full Page Cache (F
     api_token  = "YOUR_api_token"
     zone_name             = "your-domain.com"
     subdomain             = "store"
-  # Optional: bypass worker on asset paths
-  bypass_static = true   # creates a route for /static/* with no worker
-  bypass_media  = false  # creates a route for /media/* with no worker
+  # Optional: bypass worker on selected path prefixes (no leading slash)
+  # Default = ["static", "media", "rest", "graphql"]
+  bypass_routes = ["static", "media"]
     ```
 
 3.  **Initialize Terraform:**
@@ -74,12 +74,12 @@ The default configuration is:
 - `subdomain` (string): Subdomain to apply the worker (empty for root).
 - `account_id` (string): Cloudflare Account ID.
 - `api_token` (string, sensitive): Cloudflare API token.
-- `bypass_static` (bool, default: false): If true, creates a route for `${subdomain.}zone_name/static/*` with no worker, letting Cloudflare serve assets directly.
-- `bypass_media` (bool, default: false): If true, creates a route for `${subdomain.}zone_name/media/*` with no worker.
+- `bypass_routes` (list(string), default: `["static", "media", "rest", "graphql"]`): Each entry creates a route `${subdomain.}zone_name/<value>/*` with no worker attached. Set to `[]` to disable all bypasses.
 
 Notes:
-- The main route `${subdomain.}zone_name/*` continues to attach the worker. When a bypass route is enabled, that more specific route takes precedence for requests matching it.
-- The bypass routes are implemented by creating Cloudflare Worker Routes with an empty `script`, which means the request will not be handled by a Worker.
+-- The main route `${subdomain.}zone_name/*` continues to attach the worker. Any more specific bypass route takes precedence.
+-- Bypass routes are implemented by creating Cloudflare Worker Routes with an empty `script`, so the request is served directly by Cloudflare.
+-- Breaking change: Previous boolean variables `bypass_static` and `bypass_media` were replaced by `bypass_routes`.
 
 ### Purging the Cache
 
