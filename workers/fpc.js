@@ -284,7 +284,8 @@ async function fetchAndCache(request, cacheKey, cached, config) {
     }
 
     if (/^text\/html/i.test(contentType) && responseToCache.headers.has('Set-Cookie')) {
-      delete headers['set-cookie'];
+      debugLog(config, `Skip caching: HTML response with Set-Cookie header`);
+      return originResponse;
     }
 
     /*
