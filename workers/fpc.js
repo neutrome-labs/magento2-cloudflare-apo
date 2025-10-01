@@ -98,7 +98,7 @@ async function handleRequest(event) {
     debugLog(config, `Hit-for-pass active (${record.expires - now}ms remaining)`);
     // no-production
     claims.push('cache:hfp');
-    const response = await fetchFromOrigin(context, event, { tag: 'pass-active' });
+    const response = await fetchFromOrigin(context, event, { tag: 'pass' });
     return withClaimsHeader(finalizeResponse(response, context, 'UNCACHEABLE'), config, claims);
   }
 
@@ -412,7 +412,7 @@ async function fetchCacheableResponse(event, context, previousRecord) {
 }
 
 async function fetchFromOrigin(context, event, metadata = {}) {
-  const request = buildOriginRequest(context);
+  const request = buildOriginRequest(context, event, metadata);
   const response = await fetch(request);
   if (metadata.tag) {
     // no-production
@@ -421,11 +421,11 @@ async function fetchFromOrigin(context, event, metadata = {}) {
   return response;
 }
 
-function buildOriginRequest(context) {
+function buildOriginRequest(context, event, metadata = {}) {
   const { request, url, config, isStatic, cookieHeader } = context;
   const headers = new Headers(request.headers);
 
-  if (cookieHeader) {
+  if (metadata.tag !== 'pass' && cookieHeader) {
     if (isStatic) {
       headers.delete('Cookie');
     } else {
