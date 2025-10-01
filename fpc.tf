@@ -6,7 +6,7 @@ resource "cloudflare_workers_kv_namespace" "fpc_cache" {
 resource "cloudflare_workers_script" "fpc" {
   account_id  = var.account_id
   script_name = "${var.subdomain != "" ? var.subdomain : "root"}-fpc"
-  content     = file("workers/fpc.js")
+  content     = file("workers/fpc.production.js")
 
   bindings = [
     {

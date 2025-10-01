@@ -55,13 +55,6 @@ const CONFIG = {
 
 const CACHE_PREFIX = 'fpc:';
 
-// <no-production>
-function debugLog(config, ...args) {
-  if (config && config.debug) {
-    console.log('[FPC DEBUG]', ...args);
-  }
-}
-// </no-production>
 
 async function handleRequest(event) {
   const request = event.request;
@@ -69,8 +62,6 @@ async function handleRequest(event) {
   const claims = [];
   const context = createContext(request, config, claims);
 
-  // no-production
-  debugLog(config, `Request ${request.method} ${context.originalUrl}`);
 
   if (request.method === 'POST' && request.headers.get('X-Purge-Secret')) {
     const purgeResponse = await handlePurgeRequest(context);
@@ -79,67 +70,43 @@ async function handleRequest(event) {
 
   const bypass = shouldBypass(context);
   if (bypass.bypass) {
-    // no-production
-    claims.push(`bypass:${bypass.reason}`);
     const response = await fetchFromOrigin(context, event, { tag: 'pass' });
     return withClaimsHeader(finalizeResponse(response, context, 'UNCACHEABLE'), config, claims);
   }
 
   const cacheKey = await computeCacheKey(context);
   context.cacheKey = cacheKey;
-  // no-production
-  debugLog(config, `Cache key => ${cacheKey}`);
 
   const record = await readCacheRecord(cacheKey);
   const now = Date.now();
 
   if (record && record.state === 'pass' && record.expires > now) {
-    // no-production
-    debugLog(config, `Hit-for-pass active (${record.expires - now}ms remaining)`);
-    // no-production
-    claims.push('cache:hfp');
     const response = await fetchFromOrigin(context, event, { tag: 'pass-active' });
     return withClaimsHeader(finalizeResponse(response, context, 'UNCACHEABLE'), config, claims);
   }
 
   if (record && record.state === 'cache') {
     if (record.expires > now) {
-      // no-production
-      debugLog(config, `Cache HIT, ttl left ${(record.expires - now) / 1000 | 0}s`);
-      // no-production
-      claims.push('cache:hit');
       const response = buildCachedResponse(record, context, 'HIT');
       return withClaimsHeader(response, config, claims);
     }
 
     if (record.staleUntil > now) {
-      // no-production
-      debugLog(config, `Cache STALE deliver, grace left ${(record.staleUntil - now) / 1000 | 0}s`);
-      // no-production
-      claims.push('cache:stale');
       event.waitUntil(revalidate(event, context, record));
       const response = buildCachedResponse(record, context, 'STALE');
       return withClaimsHeader(response, config, claims);
     }
 
-    // no-production
-    debugLog(config, 'Cached record expired beyond grace, treating as miss');
   }
 
   const { response, cacheResult, skipCache, uncacheableReason } = await fetchCacheableResponse(event, context, record);
 
   if (cacheResult) {
     await writeCacheRecord(cacheKey, cacheResult);
-    // no-production
-    claims.push('cache:write');
   } else if (skipCache && uncacheableReason === 'hit-for-pass') {
     await storeHitForPass(cacheKey, context);
-    // no-production
-    claims.push('cache:hfp-store');
   }
 
-  // no-production
-  claims.push('cache:miss');
   const finalized = finalizeResponse(response, context, skipCache ? 'UNCACHEABLE' : 'MISS');
   return withClaimsHeader(finalized, config, claims);
 }
@@ -183,11 +150,6 @@ function normalizeUrl(url, config, claims) {
   const pathname = normalized.pathname;
   const search = normalized.search;
 
-  // <no-production>
-  if (marketingRemoved.length) {
-    claims.push(`strip_params:${marketingRemoved.join(',')}`);
-  }
-  // </no-production>
 
   return { url: normalized, pathname, search, marketingRemoved };
 }
@@ -338,8 +300,6 @@ async function revalidate(event, context, record) {
   try {
     await fetchCacheableResponse(event, context, record);
   } catch (err) {
-    // no-production
-    debugLog(context.config, 'Revalidate error', err);
   }
 }
 
@@ -361,8 +321,6 @@ async function fetchCacheableResponse(event, context, previousRecord) {
 
   const noStoreHeader = /no-store/i.test(cacheControl) || /no-cache/i.test(cacheControl) || /no-store/i.test(surrogate);
   if ((context.config.respectPrivateNoCache && noStoreHeader) || vary === '*') {
-    // no-production
-    debugLog(config, `Marking hit-for-pass: cache-control='${cacheControl}' surrogate='${surrogate}' vary='${vary}'`);
     return { response, skipCache: true, uncacheableReason: 'hit-for-pass' };
   }
 
@@ -387,8 +345,6 @@ async function fetchCacheableResponse(event, context, previousRecord) {
   if (context.isGraphql && context.magentoCacheId) {
     const responseCacheId = headers.get('X-Magento-Cache-Id');
     if (responseCacheId && responseCacheId !== context.magentoCacheId) {
-      // no-production
-      debugLog(config, `GraphQL cache-id mismatch request=${context.magentoCacheId} response=${responseCacheId}`);
       return { response, skipCache: true, uncacheableReason: 'graphql-mismatch' };
     }
   }
@@ -415,8 +371,6 @@ async function fetchFromOrigin(context, event, metadata = {}) {
   const request = buildOriginRequest(context);
   const response = await fetch(request);
   if (metadata.tag) {
-    // no-production
-    debugLog(context.config, `Origin fetch metadata tag=${metadata.tag}`);
   }
   return response;
 }
@@ -594,24 +548,6 @@ async function handlePurgeRequest(context) {
 }
 
 function withClaimsHeader(response, config, claims) {
-  // no-production
-  if (!config.returnClaims) {
     return response;
-  // no-production  
-  }
 
-  // <no-production>
-  const unique = [...new Set(claims.filter(Boolean))];
-  if (!unique.length) {
-    return response;
-  }
-
-  const headers = new Headers(response.headers);
-  headers.set('X-APO-Claims', unique.join('|'));
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers
-  });
-  // </no-production>
 }
