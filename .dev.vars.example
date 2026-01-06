@@ -46,6 +46,21 @@ EXCLUDED_PATHS=["/admin","/customer","/section/load","/checkout","/wishlist","/c
 # Cookies used for cache variation
 VARY_COOKIES=["X-Magento-Vary"]
 
+# Headers used for cache variation (e.g., Accept-Language)
+# Note: For device type variation, use VARY_ON_DEVICE_TYPE instead of CF-Device-Type header
+VARY_HEADERS=[]
+
+# Device type detection from User-Agent (separates mobile/tablet/desktop caches)
+# Set to false to disable device-based cache separation
+VARY_ON_DEVICE_TYPE=true
+
+# User-Agent regex patterns for device detection (case-insensitive)
+# Mobile: phones, mobile browsers
+MOBILE_UA_PATTERN=(?:phone|windows\s+phone|ipod|blackberry|(?:android|bb\d+|meego|silk|googlebot) .+? mobile|palm|windows\s+ce|opera mini|avantgo|mobilesafari|docomo|kaios)
+# Tablet: tablets that don't match mobile pattern
+TABLET_UA_PATTERN=(?:ipad|playbook|(?:android|bb\d+|meego|silk)(?! .+? mobile))
+# Desktop: everything else not matched by mobile or tablet patterns
+
 # Cookies allowed to pass to origin
 ALLOWED_COOKIE_NAMES=["X-Magento-Vary","store","currency","form_key","private_content_version","section_data_ids","mage-cache-sessid","mage-cache-storage","mage-cache-storage-section-invalidation","mage-messages"]
 

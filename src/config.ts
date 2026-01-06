@@ -15,6 +15,10 @@ export const DEFAULTS = {
   EXCLUDED_PATHS: ['/admin', '/customer', '/section/load', '/checkout', '/wishlist', '/cart', '/sales', '/rest/', '/onestepcheckout', '/password'],
   GRAPHQL_PATH: '/graphql',
   VARY_COOKIES: ['X-Magento-Vary'],
+  VARY_HEADERS: [] as string[],
+  VARY_ON_DEVICE_TYPE: true,
+  MOBILE_UA_PATTERN: '(?:phone|windows\\s+phone|ipod|blackberry|(?:android|bb\\d+|meego|silk|googlebot) .+? mobile|palm|windows\\s+ce|opera mini|avantgo|mobilesafari|docomo|kaios)',
+  TABLET_UA_PATTERN: '(?:ipad|playbook|(?:android|bb\\d+|meego|silk)(?! .+? mobile))',
   ALLOWED_COOKIE_NAMES: ['X-Magento-Vary', 'store', 'currency', 'form_key', 'private_content_version', 'section_data_ids', 'mage-cache-sessid', 'mage-cache-storage', 'mage-cache-storage-section-invalidation', 'mage-messages'],
   INCLUDED_RESPONSE_TYPES: ['text/html', 'text/css', 'text/javascript', 'application/javascript']
 } as const;
@@ -56,6 +60,10 @@ export function buildConfig(env: Env): Config {
     excludedPaths: envArray(env.EXCLUDED_PATHS, DEFAULTS.EXCLUDED_PATHS),
     graphqlPath: env.GRAPHQL_PATH || DEFAULTS.GRAPHQL_PATH,
     varyCookies: envArray(env.VARY_COOKIES, DEFAULTS.VARY_COOKIES),
+    varyHeaders: envArray(env.VARY_HEADERS, DEFAULTS.VARY_HEADERS),
+    varyOnDeviceType: envBool(env.VARY_ON_DEVICE_TYPE, DEFAULTS.VARY_ON_DEVICE_TYPE),
+    mobileUaPattern: new RegExp(env.MOBILE_UA_PATTERN || DEFAULTS.MOBILE_UA_PATTERN, 'i'),
+    tabletUaPattern: new RegExp(env.TABLET_UA_PATTERN || DEFAULTS.TABLET_UA_PATTERN, 'i'),
     allowedCookieNames: envArray(env.ALLOWED_COOKIE_NAMES, DEFAULTS.ALLOWED_COOKIE_NAMES),
     includedResponseTypes: envArray(env.INCLUDED_RESPONSE_TYPES, DEFAULTS.INCLUDED_RESPONSE_TYPES)
   };

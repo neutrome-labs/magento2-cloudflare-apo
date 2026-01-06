@@ -103,7 +103,7 @@ export function shouldBypass(context: Context): BypassResult {
 }
 
 export function computeCacheKey(context: Context): string {
-  const { url, config, magentoCacheId, isGraphql, cookieHeader, sslOffloaded, store, currency, hasAuthToken } = context;
+  const { request, url, config, magentoCacheId, isGraphql, cookieHeader, sslOffloaded, store, currency, hasAuthToken } = context;
   let key = `${CACHE_PREFIX}${url.hostname}${url.pathname}`;
 
   const params = url.searchParams;
@@ -120,6 +120,16 @@ export function computeCacheKey(context: Context): string {
   } else {
     const varyCookie = extractCookieValue(cookieHeader, config.varyCookies);
     if (varyCookie) key += `::vary:${varyCookie}`;
+  }
+
+  // Add vary headers to cache key (e.g., CF-Device-Type for mobile/desktop separation)
+  const varyHeaderValue = extractVaryHeaders(request.headers, config.varyHeaders);
+  if (varyHeaderValue) key += `::vh:${varyHeaderValue}`;
+
+  // Add device type based on User-Agent regex matching
+  if (config.varyOnDeviceType) {
+    const deviceType = detectDeviceType(request.headers.get('User-Agent') || '', config);
+    key += `::device:${deviceType}`;
   }
 
   if (sslOffloaded) key += `::ssl:${sslOffloaded}`;
@@ -144,4 +154,24 @@ function extractCookieValue(cookieHeader: string, names: string[]): string {
   }
 
   return wanted.join('_');
+}
+
+function extractVaryHeaders(headers: Headers, names: string[]): string {
+  if (!names.length) return '';
+
+  const values: string[] = [];
+  for (const name of names) {
+    const value = headers.get(name);
+    if (value) values.push(`${name}=${value}`);
+  }
+
+  return values.join('_');
+}
+
+export function detectDeviceType(userAgent: string, config: Config): 'mobile' | 'tablet' | 'desktop' {
+  if (!userAgent) return 'desktop';
+  
+  if (config.mobileUaPattern.test(userAgent)) return 'mobile';
+  if (config.tabletUaPattern.test(userAgent)) return 'tablet';
+  return 'desktop';
 }

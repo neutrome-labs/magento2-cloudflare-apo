@@ -15,6 +15,10 @@ export interface Config {
   excludedPaths: string[];
   graphqlPath: string;
   varyCookies: string[];
+  varyHeaders: string[];
+  varyOnDeviceType: boolean;
+  mobileUaPattern: RegExp;
+  tabletUaPattern: RegExp;
   allowedCookieNames: string[];
   includedResponseTypes: string[];
 }

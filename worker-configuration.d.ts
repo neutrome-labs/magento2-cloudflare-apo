@@ -23,6 +23,10 @@ declare namespace Cloudflare {
 		MARKETING_PARAMS: string;
 		EXCLUDED_PATHS: string;
 		VARY_COOKIES: string;
+		VARY_HEADERS: string;
+		VARY_ON_DEVICE_TYPE: string;
+		MOBILE_UA_PATTERN: string;
+		TABLET_UA_PATTERN: string;
 		ALLOWED_COOKIE_NAMES: string;
 		INCLUDED_RESPONSE_TYPES: string;
 	}
