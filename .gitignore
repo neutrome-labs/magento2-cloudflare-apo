@@ -1,5 +1,11 @@
-*.tfvars
-.terraform/
-.terraform.lock.hcl
-*.tfstate*
-config.*.json
+# Wrangler
+.wrangler/
+.dev.vars
+node_modules/
+
+# Build
+dist/
+
+# TypeScript
+*.tsbuildinfo
+

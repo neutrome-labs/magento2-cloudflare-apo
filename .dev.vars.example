@@ -1,0 +1,45 @@
+# Magento 2 FPC Worker - Environment Variables
+# Copy to .dev.vars for local development
+# For production, set via wrangler.json "vars" or `wrangler secret put`
+
+# Required - set via `wrangler secret put PURGE_SECRET`
+PURGE_SECRET=your-secure-purge-secret
+
+# Debug mode - logs to console
+DEBUG=true
+
+# Cache TTL in seconds (default: 86400 = 24h)
+DEFAULT_TTL=86400
+
+# Grace period for stale-while-revalidate in seconds (default: 259200 = 72h)
+GRACE_SECONDS=259200
+
+# Hit-for-pass duration for uncacheable responses (default: 120 = 2min)
+HIT_FOR_PASS_SECONDS=120
+
+# Respect Cache-Control: private/no-cache/no-store headers
+RESPECT_PRIVATE_NO_CACHE=false
+RESPECT_CACHE_CONTROL=false
+
+# Cache responses for logged-in users (uses X-Magento-Vary)
+CACHE_LOGGED_IN=true
+
+# GraphQL endpoint path
+GRAPHQL_PATH=/graphql
+
+# Regex patterns (escape backslashes)
+STATIC_PATH_PATTERN=^/(?:pub/)?(?:media|static)/
+HEALTH_CHECK_PATTERN=^/(?:pub/)?health_check\.php$
+
+# JSON arrays - paths/params to exclude or strip
+MARKETING_PARAMS=["gclid","cx","ie","cof","siteurl","zanpid","origin","fbclid","mc_*","utm_*","_bta_*"]
+EXCLUDED_PATHS=["/admin","/customer","/section/load","/checkout","/wishlist","/cart","/sales","/rest/","/onestepcheckout","/password"]
+
+# Cookies used for cache variation
+VARY_COOKIES=["X-Magento-Vary"]
+
+# Cookies allowed to pass to origin
+ALLOWED_COOKIE_NAMES=["X-Magento-Vary","store","currency","form_key","private_content_version","section_data_ids","mage-cache-sessid","mage-cache-storage","mage-cache-storage-section-invalidation","mage-messages"]
+
+# Response content types to cache
+INCLUDED_RESPONSE_TYPES=["text/html","text/css","text/javascript","application/javascript"]
