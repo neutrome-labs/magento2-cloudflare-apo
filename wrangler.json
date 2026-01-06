@@ -1,18 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "magento-fpc",
+  "name": "magento2-fpc-of-cloudflare-apo",
   "main": "src/index.ts",
-  "compatibility_date": "2024-01-01",
+  "compatibility_date": "2026-01-01",
   "kv_namespaces": [
     {
-      "binding": "FPC_CACHE",
-      "id": "YOUR_KV_NAMESPACE_ID"
+      "binding": "FPC_CACHE"
     }
   ],
   "vars": {
     "DEBUG": "false"
-  },
-  "dev": {
-    "port": 8787
   }
 }

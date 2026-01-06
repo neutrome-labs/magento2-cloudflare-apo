@@ -1,13 +1,12 @@
 {
   "name": "magento2-cloudflare-apo",
   "version": "1.0.0",
-  "description": "Cloudflare Worker for Magento 2 Full Page Cache",
+  "description": "Cloudflare APO for Magento 2 (Full Page Cache)",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
-    "kv:create": "wrangler kv namespace create FPC_CACHE",
     "kv:list": "wrangler kv namespace list",
     "types": "wrangler types",
     "check": "tsc --noEmit"

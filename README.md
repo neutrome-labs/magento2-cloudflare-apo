@@ -1,90 +1,146 @@
 # Cloudflare Worker FPC for Magento 2
 
-This Terraform module deploys a Cloudflare Worker to act as a Full Page Cache (FPC) for a Magento 2 store. It uses Cloudflare KV for caching and configuration, and implements a stale-while-revalidate strategy to ensure high performance and availability.
+A Cloudflare Worker implementing Full Page Cache (FPC) for Magento 2 stores. Uses Cloudflare KV for storage and implements stale-while-revalidate for optimal performance.
 
 ## Features
 
-- **Stale-While-Revalidate:** Serves stale content while fetching a fresh version in the background, ensuring users always get a fast response.
-- **Dynamic Cookie/Header-based Cache Bypass:** Automatically bypasses the cache for users with active sessions or items in their cart.
-- **Secure Purging:** Includes a secure endpoint to purge the cache for a specific URL.
-- **Cache Status Headers:** Adds `X-FPC-Cache` (HIT, MISS, STALE) headers to responses for easy debugging.
-- **Configurable Bypass Routes:** Provide a list of path prefixes (e.g. `static`, `media`, `rest`, `graphql`) where the worker is bypassed.
+- **Stale-While-Revalidate** - Serves stale content while fetching fresh version in background
+- **Smart Cache Bypass** - Automatic bypass for logged-in users, checkout, admin paths
+- **GraphQL Support** - Caches GraphQL responses with X-Magento-Cache-Id variation
+- **Secure Purging** - Protected endpoint for cache invalidation
+- **Debug Headers** - `X-FPC-Cache` (HIT/MISS/STALE/UNCACHEABLE) for easy debugging
+- **Fully Configurable** - All settings overridable via environment variables
 
-## How to Use
+## Quick Start
 
 ### Prerequisites
 
-- Terraform installed
-- A Cloudflare account with a domain configured
-- A Cloudflare API Token with the following permissions:
-  - `Workers Scripts: Edit`
-  - `Workers KV Storage: Write`
-  - `Zone: Read`
-  - `DNS: Edit`
+- Node.js >= 18
+- Cloudflare account with a configured domain
 
-### Deployment
+### Setup
 
-1.  **Clone this repository or use it as a module.**
+```bash
+# Install dependencies
+npm install
 
-2.  **Create a `terraform.tfvars` file** in this directory with the following content:
+# Login to Cloudflare
+npx wrangler login
 
-    ```hcl
-    account_id = "YOUR_account_id"
-    api_token  = "YOUR_api_token"
-    zone_name             = "your-domain.com"
-    subdomain             = "store"
-  # Optional: bypass worker on selected path prefixes (no leading slash)
-  # Default = ["static", "media", "rest", "graphql"]
-  bypass_routes = ["static", "media"]
-    ```
+# Set purge secret
+npx wrangler secret put PURGE_SECRET
 
-3.  **Initialize Terraform:**
+# Deploy
+npm run deploy
+```
 
-    ```bash
-    terraform init
-    ```
+### Configure Routes
 
-4.  **Apply the Terraform configuration:**
-
-    ```bash
-    terraform apply
-    ```
-
-### Configuration
-
-After the first run, the worker will populate the `FPC_CONFIG` KV namespace with a default configuration. You can edit this configuration directly in the Cloudflare dashboard (`Workers & Pages` -> `KV`).
-
-The default configuration is:
+Edit `wrangler.json` to add your domain:
 
 ```json
 {
-  "ttl": 3600,
-  "purge_secret": "your-default-secret",
-  "included_mimetypes": ["text/html", "application/json"],
-  "excluded_paths": ["/admin", "/customer", "/checkout", "/wishlist"],
-  "vary_on_params": ["utm_source", "utm_medium"]
+  "routes": [
+    { "pattern": "example.com/*", "zone_name": "example.com" }
+  ]
 }
 ```
 
-**Important:** Change the `purge_secret` to a secure, unique value.
+## Project Structure
 
-### Variables
+```
+src/
+├── index.ts      # Entry point - fetch handler
+├── types.ts      # TypeScript interfaces
+├── config.ts     # Environment parsing & defaults
+├── context.ts    # Request analysis & cache keys
+├── cache.ts      # KV storage operations
+├── origin.ts     # Origin fetching logic
+├── response.ts   # Response formatting
+└── purge.ts      # Cache purge handling
+```
 
-- `zone_name` (string): Your Cloudflare zone name (e.g., `example.com`).
-- `subdomain` (string): Subdomain to apply the worker (empty for root).
-- `account_id` (string): Cloudflare Account ID.
-- `api_token` (string, sensitive): Cloudflare API token.
-- `bypass_routes` (list(string), default: `["static", "media", "rest", "graphql"]`): Each entry creates a route `${subdomain.}zone_name/<value>/*` with no worker attached. Set to `[]` to disable all bypasses.
+## Configuration
 
-Notes:
--- The main route `${subdomain.}zone_name/*` continues to attach the worker. Any more specific bypass route takes precedence.
--- Bypass routes are implemented by creating Cloudflare Worker Routes with an empty `script`, so the request is served directly by Cloudflare.
--- Breaking change: Previous boolean variables `bypass_static` and `bypass_media` were replaced by `bypass_routes`.
+All settings have sensible defaults and can be overridden via environment variables.
 
-### Purging the Cache
+### Environment Variables
 
-To purge the cache for a specific URL, send a `PURGE` request to that URL with the correct secret header:
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `PURGE_SECRET` | string | - | **Required.** Secret for purge endpoint |
+| `DEBUG` | boolean | `false` | Enable debug logging |
+| `DEFAULT_TTL` | number | `86400` | Cache TTL in seconds (24h) |
+| `GRACE_SECONDS` | number | `259200` | Stale grace period (72h) |
+| `HIT_FOR_PASS_SECONDS` | number | `120` | Uncacheable marker TTL |
+| `RESPECT_CACHE_CONTROL` | boolean | `false` | Honor origin Cache-Control |
+| `CACHE_LOGGED_IN` | boolean | `true` | Cache with X-Magento-Vary |
+| `GRAPHQL_PATH` | string | `/graphql` | GraphQL endpoint path |
+| `EXCLUDED_PATHS` | JSON array | See below | Paths to bypass cache |
+| `MARKETING_PARAMS` | JSON array | See below | URL params to strip |
+| `VARY_COOKIES` | JSON array | `["X-Magento-Vary"]` | Cookies for cache variation |
+
+### Default Excluded Paths
+
+```json
+["/admin", "/customer", "/section/load", "/checkout", "/wishlist", "/cart", "/sales", "/rest/", "/onestepcheckout", "/password"]
+```
+
+### Default Marketing Params (stripped from URLs)
+
+```json
+["gclid", "cx", "ie", "cof", "siteurl", "zanpid", "origin", "fbclid", "mc_*", "utm_*", "_bta_*"]
+```
+
+See [.dev.vars.example](.dev.vars.example) for complete reference.
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start local development server |
+| `npm run deploy` | Deploy to Cloudflare |
+| `npm run check` | TypeScript type check |
+| `npm run types` | Regenerate Env types |
+| `npm run kv:list` | List KV namespaces |
+| `npm run tail` | Stream live logs |
+
+## Cache Purging
+
+Send a POST request with the purge secret:
 
 ```bash
-curl -X PURGE "https://store.your-domain.com/some-page" \
-     -H "X-Purge-Secret: YOUR_CONFIGURED_SECRET"
+# Purge by cache key header
+curl -X POST "https://your-domain.com/any-path" \
+  -H "X-Purge-Secret: YOUR_SECRET" \
+  -H "X-Cache-Key: fpc:your-domain.com/path"
+
+# Purge multiple keys via body
+curl -X POST "https://your-domain.com/any-path" \
+  -H "X-Purge-Secret: YOUR_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"keys": ["fpc:domain.com/page1", "fpc:domain.com/page2"]}'
+```
+
+## Response Headers
+
+| Header | Values | Description |
+|--------|--------|-------------|
+| `X-FPC-Cache` | `HIT`, `MISS`, `STALE`, `UNCACHEABLE` | Cache status |
+| `X-FPC-Grace` | `normal` | Present when serving stale |
+| `X-Magento-Cache-Debug` | `HIT`, `MISS`, etc. | Magento compatibility |
+
+## Local Development
+
+```bash
+# Copy example env file
+cp .dev.vars.example .dev.vars
+
+# Edit .dev.vars with your settings
+# Start dev server
+npm run dev
+```
+
+## License
+
+MIT
