@@ -1,4 +1,5 @@
 export interface Config {
+  originHost: string | null;
   defaultTtl: number;
   graceSeconds: number;
   respectPrivateNoCache: boolean;

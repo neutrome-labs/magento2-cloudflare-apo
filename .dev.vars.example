@@ -2,6 +2,11 @@
 # Copy to .dev.vars for local development
 # For production, set via wrangler.json "vars" or `wrangler secret put`
 
+# Optional: Rewrite origin host for all backend requests
+# Useful for proxying domain.com to a different backend server
+# Leave empty to use the request's original host
+# ORIGIN_HOST=backend.example.com
+
 # Required - set via `wrangler secret put PURGE_SECRET`
 PURGE_SECRET=your-secure-purge-secret
 

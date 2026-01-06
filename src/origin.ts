@@ -11,6 +11,16 @@ function buildOriginRequest(context: Context): Request {
   const { request, url, config, isStatic, cookieHeader } = context;
   const headers = new Headers(request.headers);
 
+  // Build target URL, optionally rewriting origin host
+  let targetUrl = url.toString();
+  if (config.originHost) {
+    const rewritten = new URL(url.toString());
+    rewritten.host = config.originHost;
+    targetUrl = rewritten.toString();
+    // Preserve original Host header for virtual hosting
+    headers.set('Host', url.host);
+  }
+
   if (cookieHeader) {
     if (isStatic) {
       headers.delete('Cookie');
@@ -34,7 +44,7 @@ function buildOriginRequest(context: Context): Request {
     }
   }
 
-  return new Request(url.toString(), {
+  return new Request(targetUrl, {
     method: request.method,
     headers,
     body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,

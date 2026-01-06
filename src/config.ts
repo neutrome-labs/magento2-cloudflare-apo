@@ -39,6 +39,7 @@ function envArray(val: string | undefined, fallback: readonly string[]): string[
 
 export function buildConfig(env: Env): Config {
   return {
+    originHost: env.ORIGIN_HOST || null,
     defaultTtl: envInt(env.DEFAULT_TTL, DEFAULTS.DEFAULT_TTL),
     graceSeconds: envInt(env.GRACE_SECONDS, DEFAULTS.GRACE_SECONDS),
     hitForPassSeconds: envInt(env.HIT_FOR_PASS_SECONDS, DEFAULTS.HIT_FOR_PASS_SECONDS),
