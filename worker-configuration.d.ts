@@ -16,6 +16,7 @@ declare namespace Cloudflare {
 		RESPECT_PRIVATE_NO_CACHE: string;
 		RESPECT_CACHE_CONTROL: string;
 		CACHE_LOGGED_IN: string;
+		RETURN_CLAIMS: string;
 		GRAPHQL_PATH: string;
 		STATIC_PATH_PATTERN: string;
 		HEALTH_CHECK_PATTERN: string;

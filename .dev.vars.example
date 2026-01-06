@@ -29,6 +29,9 @@ RESPECT_CACHE_CONTROL=false
 # Cache responses for logged-in users (uses X-Magento-Vary)
 CACHE_LOGGED_IN=true
 
+# Return X-APO-Claims header showing request handling details
+RETURN_CLAIMS=true
+
 # GraphQL endpoint path
 GRAPHQL_PATH=/graphql
 

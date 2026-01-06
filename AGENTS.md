@@ -66,6 +66,7 @@ All config is overridable via environment. See `.dev.vars.example` for complete 
 Key variables:
 - `PURGE_SECRET` - Required secret for cache purge endpoint
 - `DEBUG` - Enable console logging
+- `RETURN_CLAIMS` - Output X-APO-Claims header with request claims
 - `DEFAULT_TTL` - Cache TTL in seconds
 - `EXCLUDED_PATHS` - JSON array of paths to bypass
 

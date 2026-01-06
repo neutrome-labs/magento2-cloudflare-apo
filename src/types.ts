@@ -7,6 +7,7 @@ export interface Config {
   hitForPassSeconds: number;
   cacheLoggedIn: boolean;
   debug: boolean;
+  returnClaims: boolean;
   purgeSecret: string;
   staticPathPattern: RegExp;
   healthCheckPattern: RegExp;
@@ -22,6 +23,7 @@ export interface Context {
   request: Request;
   env: Env;
   config: Config;
+  claims: string[];
   originalUrl: string;
   url: URL;
   pathname: string;

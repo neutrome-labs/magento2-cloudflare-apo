@@ -1,5 +1,3 @@
-/// <reference types="@cloudflare/workers-types" />
-
 import { buildConfig, debugLog } from './config';
 import { createContext, shouldBypass, computeCacheKey } from './context';
 import { readCacheRecord, writeCacheRecord, storeHitForPass, buildCachedResponse } from './cache';
@@ -21,6 +19,7 @@ export default {
     const bypass = shouldBypass(context);
     if (bypass.bypass) {
       debugLog(config, `Bypass: ${bypass.reason}`);
+      context.claims.push(`bypass:${bypass.reason}`);
       const response = await fetchFromOrigin(context);
       return finalizeResponse(response, context, 'UNCACHEABLE');
     }
@@ -34,6 +33,7 @@ export default {
 
     if (record?.state === 'pass' && record.expires > now) {
       debugLog(config, `Hit-for-pass active (${record.expires - now}ms remaining)`);
+      context.claims.push('cache:hfp');
       const response = await fetchFromOrigin(context);
       return finalizeResponse(response, context, 'UNCACHEABLE');
     }
@@ -46,6 +46,7 @@ export default {
 
       if (record.staleUntil && record.staleUntil > now) {
         debugLog(config, `Cache STALE, grace left ${((record.staleUntil - now) / 1000) | 0}s`);
+        context.claims.push('cache:stale');
         ctx.waitUntil(revalidate(context, record));
         return buildCachedResponse(record, context, 'STALE');
       }
@@ -56,9 +57,13 @@ export default {
     const { response, cacheResult, skipCache, uncacheableReason } = await fetchCacheableResponse(context);
 
     if (cacheResult) {
+      context.claims.push('cache:write');
       await writeCacheRecord(env.FPC_CACHE, cacheKey, cacheResult);
     } else if (skipCache && uncacheableReason === 'hit-for-pass') {
+      context.claims.push('cache:hfp-store');
       await storeHitForPass(env.FPC_CACHE, cacheKey, context);
+    } else if (skipCache && uncacheableReason) {
+      context.claims.push(`cache:skip:${uncacheableReason}`);
     }
 
     return finalizeResponse(response, context, skipCache ? 'UNCACHEABLE' : 'MISS');

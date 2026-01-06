@@ -10,10 +10,16 @@ export function createContext(request: Request, env: Env, config: Config): Conte
   const magentoCacheId = headers.get('X-Magento-Cache-Id') || '';
   const authHeader = headers.get('Authorization') || '';
 
+  const claims: string[] = [];
+  if (normalized.marketingRemoved.length) {
+    claims.push(`strip_params:${normalized.marketingRemoved.join(',')}`);
+  }
+
   return {
     request,
     env,
     config,
+    claims,
     originalUrl: url.href,
     url: normalized.url,
     pathname: normalized.pathname,

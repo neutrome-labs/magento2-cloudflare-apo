@@ -4,6 +4,9 @@ export function finalizeResponse(response: Response, context: Context, cacheStat
   const headers = new Headers(response.headers);
   const isStatic = context.isStatic;
 
+  // Add cache state to claims
+  context.claims.push(`cache:${cacheState.toLowerCase()}`);
+
   if (!headers.has('X-Magento-Cache-Debug')) {
     headers.set('X-Magento-Cache-Debug', cacheState === 'UNCACHEABLE' ? 'UNCACHEABLE' : cacheState);
   }
@@ -23,6 +26,11 @@ export function finalizeResponse(response: Response, context: Context, cacheStat
 
   const removeHeaders = ['X-Magento-Debug', 'X-Magento-Tags', 'X-Pool', 'X-Powered-By', 'Server', 'X-Varnish', 'Via', 'Link'];
   removeHeaders.forEach(h => headers.delete(h));
+
+  // Add claims header when returnClaims is enabled
+  if (context.config.returnClaims && context.claims.length) {
+    headers.set('X-APO-Claims', [...new Set(context.claims)].join('|'));
+  }
 
   return context.request.method === 'HEAD'
     ? new Response(null, { status: response.status, statusText: response.statusText, headers })
