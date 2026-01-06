@@ -4,6 +4,7 @@ import { writeCacheRecord } from './cache';
 
 export async function fetchFromOrigin(context: Context): Promise<Response> {
   const request = buildOriginRequest(context);
+  debugLog(context.config, `Fetching from origin: ${request.url}`);
   return fetch(request);
 }
 
@@ -11,14 +12,28 @@ function buildOriginRequest(context: Context): Request {
   const { request, url, config, isStatic, cookieHeader } = context;
   const headers = new Headers(request.headers);
 
-  // Build target URL, optionally rewriting origin host
+  // Build target URL, optionally rewriting origin host and/or protocol
   let targetUrl = url.toString();
-  if (config.originHost) {
+  if (config.originHost || config.originProtocol) {
     const rewritten = new URL(url.toString());
-    rewritten.host = config.originHost;
+    const originalHost = url.host;
+    if (config.originHost) {
+      // Parse origin host to handle hostname:port format
+      const [hostname, port] = config.originHost.split(':');
+      rewritten.hostname = hostname;
+      rewritten.port = port || ''; // Clear port if not specified in originHost
+    }
+    if (config.originProtocol) {
+      rewritten.protocol = config.originProtocol;
+    }
     targetUrl = rewritten.toString();
-    // Preserve original Host header for virtual hosting
-    headers.set('Host', url.host);
+    // Use origin host in Host header if original is localhost (dev mode)
+    // Otherwise preserve original Host header for virtual hosting
+    if (originalHost.startsWith('localhost') || originalHost.startsWith('127.0.0.1')) {
+      headers.set('Host', config.originHost || rewritten.host);
+    } else {
+      headers.set('Host', originalHost);
+    }
   }
 
   if (cookieHeader) {

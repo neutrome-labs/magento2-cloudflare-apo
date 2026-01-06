@@ -42,9 +42,27 @@ function envArray(val: string | undefined, fallback: readonly string[]): string[
   }
 }
 
+function parseOriginHost(val: string | undefined): { host: string | null; protocol: string | null } {
+  if (!val) return { host: null, protocol: null };
+  
+  // Check if it includes a protocol (e.g., https://backend.example.com)
+  if (val.includes('://')) {
+    try {
+      const url = new URL(val);
+      return { host: url.host, protocol: url.protocol };
+    } catch {
+      return { host: val, protocol: null };
+    }
+  }
+  
+  return { host: val, protocol: null };
+}
+
 export function buildConfig(env: Env): Config {
+  const origin = parseOriginHost(env.ORIGIN_HOST);
   return {
-    originHost: env.ORIGIN_HOST || null,
+    originHost: origin.host,
+    originProtocol: origin.protocol,
     defaultTtl: envInt(env.DEFAULT_TTL, DEFAULTS.DEFAULT_TTL),
     graceSeconds: envInt(env.GRACE_SECONDS, DEFAULTS.GRACE_SECONDS),
     hitForPassSeconds: envInt(env.HIT_FOR_PASS_SECONDS, DEFAULTS.HIT_FOR_PASS_SECONDS),

@@ -4,8 +4,10 @@
 
 # Optional: Rewrite origin host for all backend requests
 # Useful for proxying domain.com to a different backend server
-# Leave empty to use the request's original host
+# Can include protocol to force http/https (e.g., https://backend.example.com)
+# Leave empty to use the request's original host and protocol
 # ORIGIN_HOST=backend.example.com
+# ORIGIN_HOST=https://backend.example.com
 
 # Required - set via `wrangler secret put PURGE_SECRET`
 PURGE_SECRET=your-secure-purge-secret
