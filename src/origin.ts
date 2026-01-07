@@ -36,7 +36,8 @@ function buildOriginRequest(context: Context): Request {
     }
   }
 
-  if (cookieHeader) {
+  // Skip cookie filtering for bypassed requests (e.g., /admin)
+  if (cookieHeader && !context.isBypassed) {
     if (isStatic) {
       headers.delete('Cookie');
     } else {

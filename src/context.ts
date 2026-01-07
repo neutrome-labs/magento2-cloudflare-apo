@@ -35,7 +35,8 @@ export function createContext(request: Request, env: Env, config: Config): Conte
     authHeader,
     store: headers.get('Store') || headers.get('X-Store') || '',
     currency: headers.get('Content-Currency') || headers.get('X-Currency') || '',
-    cacheKey: null
+    cacheKey: null,
+    isBypassed: false
   };
 }
 

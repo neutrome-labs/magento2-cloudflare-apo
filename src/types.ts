@@ -45,6 +45,7 @@ export interface Context {
   store: string;
   currency: string;
   cacheKey: string | null;
+  isBypassed: boolean;
 }
 
 export interface CacheRecord {

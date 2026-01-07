@@ -20,6 +20,7 @@ export default {
     if (bypass.bypass) {
       debugLog(config, `Bypass: ${bypass.reason}`);
       context.claims.push(`bypass:${bypass.reason}`);
+      context.isBypassed = true;
       const response = await fetchFromOrigin(context);
       return finalizeResponse(response, context, 'UNCACHEABLE');
     }
