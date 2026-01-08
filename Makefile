@@ -7,8 +7,16 @@ create-project:
 	sed -i "s/node_modules\/wrangler\/config-schema.json/..\/node_modules\/wrangler\/config-schema.json/g" $(name)/wrangler.jsonc
 	sed -i "s/magento2-fpc-of-cloudflare-apo/$(name)-magento2-fpc-of-cloudflare-apo/g" $(name)/wrangler.jsonc
 
-run-project:
-	cd $(name) && npx wrangler dev --local
+dev:
+	@if [ -n "$(name)" ]; then \
+		cd $(name) && npx wrangler dev --local; \
+	else \
+		npx wrangler dev --local; \
+	fi
 
-deploy-project:
-	cd $(name) && npx wrangler deploy
+deploy:
+	@if [ -n "$(name)" ]; then \
+		cd $(name) && npx wrangler deploy; \
+	else \
+		npx wrangler deploy; \
+	fi
