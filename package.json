@@ -4,7 +4,7 @@
   "description": "Cloudflare APO for Magento 2 (Full Page Cache)",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --local",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail",
     "kv:list": "wrangler kv namespace list",

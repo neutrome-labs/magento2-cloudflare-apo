@@ -1,14 +1,14 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "magento2-fpc-of-cloudflare-apo",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-01-01",
-  "kv_namespaces": [
-    {
-      "binding": "FPC_CACHE"
-    }
-  ],
-  "vars": {
-    "DEBUG": "false"
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "magento2-fpc-of-cloudflare-apo",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-01-01",
+	"kv_namespaces": [
+		{
+			"binding": "FPC_CACHE"
+		}
+	],
+	"vars": {
+		"DEBUG": "false"
+	}
 }
