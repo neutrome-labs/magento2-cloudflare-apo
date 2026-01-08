@@ -47,9 +47,11 @@ Request → createContext() → shouldBypass() → computeCacheKey() → cache c
 | File | Purpose |
 |------|---------|
 | `wrangler.json` | Cloudflare Worker configuration |
-| `worker-configuration.d.ts` | Env interface (`wrangler types`) |
+| `worker-configuration.d.ts` | **GENERATED** - Env interface, regenerate with `npm run types` |
 | `.dev.vars.example` | All available environment variables with defaults |
 | `tsconfig.json` | TypeScript configuration |
+
+> ⚠️ **Do not manually edit `worker-configuration.d.ts`** - it is auto-generated from `wrangler.json` by running `npm run types` (alias for `wrangler types`). When adding new environment variables, add them to `wrangler.json` and regenerate.
 
 ## Code Guidelines
 

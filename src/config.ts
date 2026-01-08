@@ -20,7 +20,8 @@ export const DEFAULTS = {
   MOBILE_UA_PATTERN: '(?:phone|windows\\s+phone|ipod|blackberry|(?:android|bb\\d+|meego|silk|googlebot) .+? mobile|palm|windows\\s+ce|opera mini|avantgo|mobilesafari|docomo|kaios)',
   TABLET_UA_PATTERN: '(?:ipad|playbook|(?:android|bb\\d+|meego|silk)(?! .+? mobile))',
   ALLOWED_COOKIE_NAMES: ['X-Magento-Vary', 'store', 'currency', 'form_key', 'private_content_version', 'section_data_ids', 'mage-cache-sessid', 'mage-cache-storage', 'mage-cache-storage-section-invalidation', 'mage-messages'],
-  INCLUDED_RESPONSE_TYPES: ['text/html', 'text/css', 'text/javascript', 'application/javascript']
+  INCLUDED_RESPONSE_TYPES: ['text/html', 'text/css', 'text/javascript', 'application/javascript'],
+  REPLACE_ORIGIN_LINKS: false
 } as const;
 
 function envBool(val: string | undefined, fallback: boolean): boolean {
@@ -78,7 +79,8 @@ export function buildConfig(env: Env): Config {
     mobileUaPattern: new RegExp(env.MOBILE_UA_PATTERN || DEFAULTS.MOBILE_UA_PATTERN, 'i'),
     tabletUaPattern: new RegExp(env.TABLET_UA_PATTERN || DEFAULTS.TABLET_UA_PATTERN, 'i'),
     allowedCookieNames: envArray(env.ALLOWED_COOKIE_NAMES, DEFAULTS.ALLOWED_COOKIE_NAMES),
-    includedResponseTypes: envArray(env.INCLUDED_RESPONSE_TYPES, DEFAULTS.INCLUDED_RESPONSE_TYPES)
+    includedResponseTypes: envArray(env.INCLUDED_RESPONSE_TYPES, DEFAULTS.INCLUDED_RESPONSE_TYPES),
+    replaceOriginLinks: envBool(env.REPLACE_ORIGIN_LINKS, DEFAULTS.REPLACE_ORIGIN_LINKS)
   };
 }
 

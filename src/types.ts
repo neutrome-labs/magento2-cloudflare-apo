@@ -22,6 +22,7 @@ export interface Config {
   tabletUaPattern: RegExp;
   allowedCookieNames: string[];
   includedResponseTypes: string[];
+  replaceOriginLinks: boolean;
 }
 
 export interface Context {
