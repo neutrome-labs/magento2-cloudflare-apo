@@ -41,16 +41,16 @@ GRAPHQL_PATH=/graphql
 STATIC_PATH_PATTERN=^/(?:pub/)?(?:media|static)/
 HEALTH_CHECK_PATTERN=^/(?:pub/)?health_check\.php$
 
-# JSON arrays - paths/params to exclude or strip
-MARKETING_PARAMS=["gclid","cx","ie","cof","siteurl","zanpid","origin","fbclid","mc_*","utm_*","_bta_*"]
-EXCLUDED_PATHS=["/admin","/customer","/section/load","/checkout","/wishlist","/cart","/sales","/rest/","/onestepcheckout","/password"]
+# Comma-separated arrays - paths/params to exclude or strip
+MARKETING_PARAMS=gclid,cx,ie,cof,siteurl,zanpid,origin,fbclid,mc_*,utm_*,_bta_*
+EXCLUDED_PATHS=/admin,/customer,/section/load,/checkout,/wishlist,/cart,/sales,/rest/,/onestepcheckout,/password
 
 # Cookies used for cache variation
-VARY_COOKIES=["X-Magento-Vary"]
+VARY_COOKIES=X-Magento-Vary
 
 # Headers used for cache variation (e.g., Accept-Language)
 # Note: For device type variation, use VARY_ON_DEVICE_TYPE instead of CF-Device-Type header
-VARY_HEADERS=[]
+VARY_HEADERS=
 
 # Device type detection from User-Agent (separates mobile/tablet/desktop caches)
 # Set to false to disable device-based cache separation
@@ -64,7 +64,8 @@ TABLET_UA_PATTERN=(?:ipad|playbook|(?:android|bb\d+|meego|silk)(?! .+? mobile))
 # Desktop: everything else not matched by mobile or tablet patterns
 
 # Cookies allowed to pass to origin
-ALLOWED_COOKIE_NAMES=["X-Magento-Vary","store","currency","form_key","private_content_version","section_data_ids","mage-cache-sessid","mage-cache-storage","mage-cache-storage-section-invalidation","mage-messages"]
+ALLOWED_COOKIE_NAMES=X-Magento-Vary,store,currency,form_key,private_content_version,section_data_ids,mage-cache-sessid,mage-cache-storage,mage-cache-storage-section-invalidation,mage-messages
 
 # Response content types to cache
-INCLUDED_RESPONSE_TYPES=["text/html","text/css","text/javascript","application/javascript"]
+INCLUDED_RESPONSE_TYPES=text/html
+#INCLUDED_RESPONSE_TYPES=text/html,text/css,text/javascript,application/javascript

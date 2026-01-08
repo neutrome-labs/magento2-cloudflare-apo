@@ -34,12 +34,7 @@ function envInt(val: string | undefined, fallback: number): number {
 
 function envArray(val: string | undefined, fallback: readonly string[]): string[] {
   if (!val) return [...fallback];
-  try {
-    const parsed = JSON.parse(val);
-    return Array.isArray(parsed) ? parsed : [...fallback];
-  } catch {
-    return [...fallback];
-  }
+  return val.split(',').map(s => s.trim()).filter(Boolean);
 }
 
 function parseOriginHost(val: string | undefined): { host: string | null; protocol: string | null } {
