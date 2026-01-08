@@ -8,14 +8,14 @@ create-project:
 	sed -i "s/magento2-fpc-of-cloudflare-apo/$(name)-magento2-fpc-of-cloudflare-apo/g" $(name)/wrangler.jsonc
 
 dev:
-	@if [ -n "$(name)" ]; then \
+	@if [ "$(name)" != "" ]; then \
 		cd $(name) && npx wrangler dev --local; \
 	else \
 		npx wrangler dev --local; \
 	fi
 
 deploy:
-	@if [ -n "$(name)" ]; then \
+	@if [ "$(name)" != "" ]; then \
 		cd $(name) && npx wrangler deploy; \
 	else \
 		npx wrangler deploy; \
