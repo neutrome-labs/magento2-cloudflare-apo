@@ -13,37 +13,20 @@ A Cloudflare Worker implementing Full Page Cache (FPC) for Magento 2 stores. Use
 
 ## Quick Start
 
-### Prerequisites
-
-- Node.js >= 18
-- Cloudflare account with a configured domain
-
-### Setup
-
 ```bash
 # Install dependencies
 npm install
 
-# Login to Cloudflare
-npx wrangler login
+# Create project
+make create-project name=PROJECT_NAME
 
-# Set purge secret
-npx wrangler secret put PURGE_SECRET
+# Edit PROJECT_NAME/wrangler.jsonc and PROJECT_NAME/.dev.vars with your settings
 
-# Deploy
-npm run deploy
-```
+# Start local dev server (both ORIGIN_HOST and REPLACE_ORIGIN_LINKS MUST be set)
+make dev name=PROJECT_NAME 
 
-### Configure Routes
-
-Edit `wrangler.json` to add your domain:
-
-```json
-{
-  "routes": [
-    { "pattern": "example.com/*", "zone_name": "example.com" }
-  ]
-}
+# Deploy to Cloudflare
+make deploy name=PROJECT_NAME
 ```
 
 ## Project Structure
@@ -63,41 +46,15 @@ src/
 ## Configuration
 
 All settings have sensible defaults and can be overridden via environment variables.
-
-### Environment Variables
-
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `PURGE_SECRET` | string | - | **Required.** Secret for purge endpoint |
-| `DEBUG` | boolean | `false` | Enable debug logging |
-| `DEFAULT_TTL` | number | `86400` | Cache TTL in seconds (24h) |
-| `GRACE_SECONDS` | number | `259200` | Stale grace period (72h) |
-| `HIT_FOR_PASS_SECONDS` | number | `120` | Uncacheable marker TTL |
-| `RESPECT_CACHE_CONTROL` | boolean | `false` | Honor origin Cache-Control |
-| `CACHE_LOGGED_IN` | boolean | `true` | Cache with X-Magento-Vary |
-| `GRAPHQL_PATH` | string | `/graphql` | GraphQL endpoint path |
-| `EXCLUDED_PATHS` | JSON array | See below | Paths to bypass cache |
-| `MARKETING_PARAMS` | JSON array | See below | URL params to strip |
-| `VARY_COOKIES` | JSON array | `["X-Magento-Vary"]` | Cookies for cache variation |
-
-### Default Excluded Paths
-
-```json
-["/admin", "/customer", "/section/load", "/checkout", "/wishlist", "/cart", "/sales", "/rest/", "/onestepcheckout", "/password"]
-```
-
-### Default Marketing Params (stripped from URLs)
-
-```json
-["gclid", "cx", "ie", "cof", "siteurl", "zanpid", "origin", "fbclid", "mc_*", "utm_*", "_bta_*"]
-```
-
 See [.dev.vars.example](.dev.vars.example) for complete reference.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
+| `make create-project name=PROJECT_NAME` | Create new project scaffold |
+| `make dev name=PROJECT_NAME` | Start local dev server for project |
+| `make deploy name=PROJECT_NAME` | Deploy project to Cloudflare |
 | `npm run dev` | Start local development server |
 | `npm run deploy` | Deploy to Cloudflare |
 | `npm run check` | TypeScript type check |
@@ -110,16 +67,14 @@ See [.dev.vars.example](.dev.vars.example) for complete reference.
 Send a POST request with the purge secret:
 
 ```bash
-# Purge by cache key header
+# Purge a single page by its URL
 curl -X POST "https://your-domain.com/any-path" \
-  -H "X-Purge-Secret: YOUR_SECRET" \
-  -H "X-Cache-Key: fpc:your-domain.com/path"
+  -H "X-Purge-Secret: YOUR_SECRET" 
 
-# Purge multiple keys via body
-curl -X POST "https://your-domain.com/any-path" \
-  -H "X-Purge-Secret: YOUR_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"keys": ["fpc:domain.com/page1", "fpc:domain.com/page2"]}'
+# Flush all
+curl -X POST "https://your-domain.com/__purge" \
+  -H "X-Purge-Secret: YOUR_SECRET"
+  -H "X-Purge-All: true"
 ```
 
 ## Response Headers
@@ -134,11 +89,11 @@ curl -X POST "https://your-domain.com/any-path" \
 
 ```bash
 # Copy example env file
-cp .dev.vars.example .dev.vars
+cp .dev.vars.example PROJECT_NAME/.dev.vars
 
 # Edit .dev.vars with your settings
 # Start dev server
-npm run dev
+make dev name=PROJECT_NAME
 ```
 
 ## License

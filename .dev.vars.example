@@ -6,9 +6,9 @@
 # Useful for proxying domain.com to a different backend server
 # Can include protocol to force http/https (e.g., https://backend.example.com)
 # Leave empty to use the request's original host and protocol
-ORIGIN_HOST=
 # ORIGIN_HOST=backend.example.com
 # ORIGIN_HOST=https://backend.example.com
+ORIGIN_HOST=
 
 # Replace links to ORIGIN_HOST in responses with the request domain
 # Useful when proxying to a backend that generates absolute URLs
