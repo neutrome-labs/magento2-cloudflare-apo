@@ -56,6 +56,11 @@ function parseOriginHost(val: string | undefined): { host: string | null; protoc
 
 export function buildConfig(env: Env): Config {
   const origin = parseOriginHost(env.ORIGIN_HOST);
+  const varyCookies = envArray(env.VARY_COOKIES, DEFAULTS.VARY_COOKIES);
+  const allowedCookieNames = envArray(env.ALLOWED_COOKIE_NAMES, DEFAULTS.ALLOWED_COOKIE_NAMES);
+  // Merge VARY_COOKIES into ALLOWED_COOKIE_NAMES to avoid manual double-config
+  const mergedAllowedCookies = [...new Set([...allowedCookieNames, ...varyCookies])];
+  
   return {
     originHost: origin.host,
     originProtocol: origin.protocol,
@@ -73,12 +78,12 @@ export function buildConfig(env: Env): Config {
     marketingParams: envArray(env.MARKETING_PARAMS, DEFAULTS.MARKETING_PARAMS),
     excludedPaths: envArray(env.EXCLUDED_PATHS, DEFAULTS.EXCLUDED_PATHS),
     graphqlPath: env.GRAPHQL_PATH || DEFAULTS.GRAPHQL_PATH,
-    varyCookies: envArray(env.VARY_COOKIES, DEFAULTS.VARY_COOKIES),
+    varyCookies,
     varyHeaders: envArray(env.VARY_HEADERS, DEFAULTS.VARY_HEADERS),
     varyOnDeviceType: envBool(env.VARY_ON_DEVICE_TYPE, DEFAULTS.VARY_ON_DEVICE_TYPE),
     mobileUaPattern: new RegExp(env.MOBILE_UA_PATTERN || DEFAULTS.MOBILE_UA_PATTERN, 'i'),
     tabletUaPattern: new RegExp(env.TABLET_UA_PATTERN || DEFAULTS.TABLET_UA_PATTERN, 'i'),
-    allowedCookieNames: envArray(env.ALLOWED_COOKIE_NAMES, DEFAULTS.ALLOWED_COOKIE_NAMES),
+    allowedCookieNames: mergedAllowedCookies,
     includedResponseTypes: envArray(env.INCLUDED_RESPONSE_TYPES, DEFAULTS.INCLUDED_RESPONSE_TYPES),
     replaceOriginLinks: envBool(env.REPLACE_ORIGIN_LINKS, DEFAULTS.REPLACE_ORIGIN_LINKS)
   };

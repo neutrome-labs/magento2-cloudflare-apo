@@ -69,6 +69,7 @@ TABLET_UA_PATTERN=(?:ipad|playbook|(?:android|bb\d+|meego|silk)(?! .+? mobile))
 # Desktop: everything else not matched by mobile or tablet patterns
 
 # Cookies allowed to pass to origin
+# Note: VARY_COOKIES are automatically merged into this list
 ALLOWED_COOKIE_NAMES=X-Magento-Vary,store,currency,form_key,private_content_version,section_data_ids,mage-cache-sessid,mage-cache-storage,mage-cache-storage-section-invalidation,mage-messages
 
 # Response content types to cache
