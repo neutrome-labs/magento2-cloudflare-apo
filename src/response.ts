@@ -3,26 +3,28 @@ import type { Context } from './types';
 /**
  * Replace all occurrences of the origin host with the request host in the response body.
  * This is useful when ORIGIN_HOST is set to a different backend server that generates
- * absolute URLs pointing to itself.
+ * absolute URLs pointing to itself. Also replaces protocol if configured.
  */
 function replaceOriginLinks(body: string, context: Context): string {
   const { config, url } = context;
   const originHost = config.originHost;
+  const originProtocol = config.originProtocol;
   
   if (!originHost || originHost === url.host) {
     return body;
   }
 
-  const requestHost = url.host;
-  const originProtocol = config.originProtocol || url.protocol;
-  const originBase = `${originProtocol}//${originHost}`;
-  const requestBase = `${url.protocol}//${requestHost}`;
+  let result = body;
 
-  // Replace full URLs (protocol + host)
-  let result = body.replaceAll(originBase, requestBase);
-  
-  // Also replace protocol-relative URLs (//host)
-  result = result.replaceAll(`//${originHost}`, `//${requestHost}`);
+  // If origin has a protocol configured, replace protocol://host with request's protocol://host
+  if (originProtocol) {
+    const originFull = `${originProtocol}//${originHost}`;
+    const requestFull = `${url.protocol}//${url.host}`;
+    result = result.replaceAll(originFull, requestFull);
+  }
+
+  // Also replace any remaining bare host references (without protocol)
+  result = result.replaceAll(originHost, url.host);
 
   return result;
 }
@@ -59,6 +61,14 @@ export function finalizeResponse(response: Response, context: Context, cacheStat
     headers.set('X-APO-Claims', [...new Set(context.claims)].join('|'));
   }
 
+  // Replace origin host in Location header for redirects
+  if (context.config.replaceOriginLinks && context.config.originHost) {
+    const location = headers.get('Location');
+    if (location) {
+      headers.set('Location', replaceOriginLinks(location, context));
+    }
+  }
+
   if (context.request.method === 'HEAD') {
     return new Response(null, { status: response.status, statusText: response.statusText, headers });
   }
@@ -67,8 +77,12 @@ export function finalizeResponse(response: Response, context: Context, cacheStat
   if (context.config.replaceOriginLinks && context.config.originHost) {
     const contentType = headers.get('Content-Type') || '';
     // Only process text-based responses
-    if (contentType.includes('text/html') || contentType.includes('text/css') || 
-        contentType.includes('application/javascript') || contentType.includes('application/json')) {
+    if (contentType.includes('text/html') || 
+        contentType.includes('text/css') || 
+        contentType.includes('application/javascript') || 
+        contentType.includes('application/json') ||
+        contentType.includes('application/xml')
+    ) {
       return response.text().then(body => {
         const modifiedBody = replaceOriginLinks(body, context);
         return new Response(modifiedBody, { status: response.status, statusText: response.statusText, headers });

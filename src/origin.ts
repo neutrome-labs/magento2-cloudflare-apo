@@ -57,6 +57,8 @@ function buildOriginRequest(context: Context): Request {
       } else {
         headers.delete('Cookie');
       }
+
+      debugLog(context.config, `Filtered cookies: kept=[${kept.join(', ')}]`);
     }
   }
 
