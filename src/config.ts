@@ -21,7 +21,9 @@ export const DEFAULTS = {
   TABLET_UA_PATTERN: '(?:ipad|playbook|(?:android|bb\\d+|meego|silk)(?! .+? mobile))',
   ALLOWED_COOKIE_NAMES: ['X-Magento-Vary', 'store', 'currency', 'form_key', 'private_content_version', 'section_data_ids', 'mage-cache-sessid', 'mage-cache-storage', 'mage-cache-storage-section-invalidation', 'mage-messages'],
   INCLUDED_RESPONSE_TYPES: ['text/html', 'text/css', 'text/javascript', 'application/javascript'],
-  REPLACE_ORIGIN_LINKS: false
+  REPLACE_ORIGIN_LINKS: false,
+  DETECT_MERGED_STYLES_CHANGES: false,
+  MERGED_STYLES_CHECK_TTL_SECONDS: 60
 } as const;
 
 function envBool(val: string | undefined, fallback: boolean): boolean {
@@ -85,7 +87,9 @@ export function buildConfig(env: Env): Config {
     tabletUaPattern: new RegExp(env.TABLET_UA_PATTERN || DEFAULTS.TABLET_UA_PATTERN, 'i'),
     allowedCookieNames: mergedAllowedCookies,
     includedResponseTypes: envArray(env.INCLUDED_RESPONSE_TYPES, DEFAULTS.INCLUDED_RESPONSE_TYPES),
-    replaceOriginLinks: envBool(env.REPLACE_ORIGIN_LINKS, DEFAULTS.REPLACE_ORIGIN_LINKS)
+    replaceOriginLinks: envBool(env.REPLACE_ORIGIN_LINKS, DEFAULTS.REPLACE_ORIGIN_LINKS),
+    detectMergedStylesChanges: envBool(env.DETECT_MERGED_STYLES_CHANGES, DEFAULTS.DETECT_MERGED_STYLES_CHANGES),
+    mergedStylesCheckTtlSeconds: envInt(env.MERGED_STYLES_CHECK_TTL_SECONDS, DEFAULTS.MERGED_STYLES_CHECK_TTL_SECONDS)
   };
 }
 

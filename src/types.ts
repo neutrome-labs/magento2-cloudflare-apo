@@ -23,6 +23,8 @@ export interface Config {
   allowedCookieNames: string[];
   includedResponseTypes: string[];
   replaceOriginLinks: boolean;
+  detectMergedStylesChanges: boolean;
+  mergedStylesCheckTtlSeconds: number;
 }
 
 export interface Context {

@@ -75,3 +75,11 @@ ALLOWED_COOKIE_NAMES=X-Magento-Vary,store,currency,form_key,private_content_vers
 # Response content types to cache
 INCLUDED_RESPONSE_TYPES=text/html
 #INCLUDED_RESPONSE_TYPES=text/html,text/css,text/javascript,application/javascript
+
+# Merged CSS/Styles Change Detection
+# When enabled, verifies that merged CSS assets referenced in cached HTML still exist (return 200)
+# If any are missing (e.g., after deployment), triggers cache invalidation and fresh fetch
+DETECT_MERGED_STYLES_CHANGES=false
+
+# TTL in seconds for caching merged CSS asset existence checks (HEAD request results)
+MERGED_STYLES_CHECK_TTL_SECONDS=60

@@ -1,6 +1,7 @@
 import type { Context, CacheRecord, FetchResult } from './types';
 import { debugLog } from './config';
 import { writeCacheRecord } from './cache';
+import { verifyMergedCss } from './css-verify';
 
 export async function fetchFromOrigin(context: Context): Promise<Response> {
   const request = buildOriginRequest(context);
@@ -111,6 +112,15 @@ export async function fetchCacheableResponse(context: Context): Promise<FetchRes
     if (responseCacheId && responseCacheId !== context.magentoCacheId) {
       debugLog(config, `GraphQL cache-id mismatch request=${context.magentoCacheId} response=${responseCacheId}`);
       return { response, skipCache: true, uncacheableReason: 'graphql-mismatch' };
+    }
+  }
+
+  // Verify merged CSS assets for HTML responses if enabled
+  const contentType = (headers.get('Content-Type') || '').toLowerCase();
+  if (config.detectMergedStylesChanges && contentType.includes('text/html')) {
+    const check = await verifyMergedCss(bodyText, context);
+    if (!check.ok) {
+      return { response, skipCache: true, uncacheableReason: 'hit-for-pass' };
     }
   }
 
