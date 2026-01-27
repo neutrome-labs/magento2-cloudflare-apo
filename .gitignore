@@ -9,3 +9,8 @@ dist/
 # TypeScript
 *.tsbuildinfo
 
+# Client-specific configurations (all subfolders except src/)
+*/
+!src/
+
+

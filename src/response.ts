@@ -76,6 +76,22 @@ export function finalizeResponse(response: Response, context: Context, cacheStat
     if (location) {
       headers.set('Location', replaceOriginLinks(location, context));
     }
+
+    // Replace domain in Set-Cookie headers
+    const cookies = response.headers.getAll('Set-Cookie');
+    if (cookies.length) {
+      headers.delete('Set-Cookie');
+      const originHost = context.config.originHost;
+      const requestHost = context.url.host;
+      for (const cookie of cookies) {
+        // Replace domain=originHost with domain=requestHost (case-insensitive)
+        const updatedCookie = cookie.replace(
+          new RegExp(`(domain=)${originHost.replace(/\./g, '\\.')}`, 'gi'),
+          `$1${requestHost}`
+        );
+        headers.append('Set-Cookie', updatedCookie);
+      }
+    }
   }
 
   if (context.request.method === 'HEAD') {
