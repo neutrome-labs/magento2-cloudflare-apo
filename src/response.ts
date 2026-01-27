@@ -36,14 +36,25 @@ export function finalizeResponse(response: Response, context: Context, cacheStat
   // Add cache state to claims
   context.claims.push(`cache:${cacheState.toLowerCase()}`);
 
-  if (!headers.has('X-Magento-Cache-Debug')) {
-    headers.set('X-Magento-Cache-Debug', cacheState === 'UNCACHEABLE' ? 'UNCACHEABLE' : cacheState);
+  // Always set package attribution header
+  headers.set('X-Served-With', 'neutrome-labs/magento2-cloudflare-apo');
+
+  // Debug-only headers
+  if (context.config.debug) {
+    if (!headers.has('X-Magento-Cache-Debug')) {
+      headers.set('X-Magento-Cache-Debug', cacheState === 'UNCACHEABLE' ? 'UNCACHEABLE' : cacheState);
+    }
+
+    headers.set('X-FPC-Cache', cacheState);
+
+    if (cacheState === 'STALE') headers.set('X-FPC-Grace', 'normal');
+    if (cacheState === 'UNCACHEABLE') headers.delete('X-FPC-Grace');
+
+    // Add claims header when returnClaims is enabled
+    if (context.config.returnClaims && context.claims.length) {
+      headers.set('X-APO-Claims', [...new Set(context.claims)].join('|'));
+    }
   }
-
-  headers.set('X-FPC-Cache', cacheState);
-
-  if (cacheState === 'STALE') headers.set('X-FPC-Grace', 'normal');
-  if (cacheState === 'UNCACHEABLE') headers.delete('X-FPC-Grace');
 
   if (!isStatic && (!headers.get('Cache-Control') || !/private/i.test(headers.get('Cache-Control') || ''))) {
     headers.set('Pragma', 'no-cache');
@@ -51,14 +62,12 @@ export function finalizeResponse(response: Response, context: Context, cacheStat
     headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   }
 
-  if (!headers.has('X-Magento-Debug')) headers.delete('Age');
+  // Strip internal headers only when not in debug mode
+  if (!context.config.debug) {
+    if (!headers.has('X-Magento-Debug')) headers.delete('Age');
 
-  const removeHeaders = ['X-Magento-Debug', 'X-Magento-Tags', 'X-Pool', 'X-Powered-By', 'Server', 'X-Varnish', 'Via', 'Link'];
-  removeHeaders.forEach(h => headers.delete(h));
-
-  // Add claims header when returnClaims is enabled
-  if (context.config.returnClaims && context.claims.length) {
-    headers.set('X-APO-Claims', [...new Set(context.claims)].join('|'));
+    const removeHeaders = ['X-Magento-Debug', 'X-Magento-Tags', 'X-Pool', 'X-Powered-By', 'Server', 'X-Varnish', 'Via', 'Link'];
+    removeHeaders.forEach(h => headers.delete(h));
   }
 
   // Replace origin host in Location header for redirects
