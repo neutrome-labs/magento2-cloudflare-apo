@@ -5,9 +5,14 @@ import type { Plugin } from '.';
  * Origin Links Plugin
  * Replaces origin host references with request host in response bodies.
  * Useful when ORIGIN_HOST points to a different backend that generates absolute URLs.
+ * 
+ * Note: Disabled when streamMissResponses=true (requires body buffering).
  */
 export function originLinksPlugin(config: Config): Plugin | null {
   if (!config.replaceOriginLinks || !config.originHost) return null;
+  
+  // Disable when streaming is enabled - body transforms require buffering
+  if (config.streamMissResponses) return null;
 
   const originHost = config.originHost;
   const originProtocol = config.originProtocol;

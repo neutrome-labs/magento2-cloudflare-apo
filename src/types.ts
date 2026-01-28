@@ -8,6 +8,7 @@ export interface Config {
   hitForPassSeconds: number;
 
   cacheLoggedIn: boolean;
+  streamMissResponses: boolean;
 
   staticPathPattern: RegExp;
   healthCheckPattern: RegExp;
@@ -89,4 +90,14 @@ export interface FetchResult {
   cacheResult?: CacheRecord;
   skipCache?: boolean;
   uncacheableReason?: string;
+}
+
+/**
+ * Streaming response result for immediate client delivery.
+ * The response can be returned immediately; caching happens in background.
+ */
+export interface StreamingFetchResult {
+  response: Response;
+  /** Promise that resolves when background caching is complete */
+  cachePromise: Promise<void>;
 }

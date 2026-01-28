@@ -5,6 +5,14 @@ import { debugLog } from '../config';
 const ASSET_OK_PREFIX = 'assetok:';
 
 /**
+ * Merged CSS Guard Plugin
+ * Validates that merged CSS assets referenced in HTML still exist (return 200).
+ * If any are missing, blocks caching to prevent serving broken pages.
+ * 
+ * Note: Disabled when streamMissResponses=true (shouldCache requires body buffering).
+ */
+
+/**
  * Extract Magento merged CSS links from HTML
  * e.g., /static/version1762259560/_cache/merged/<hash>.min.css
  */
@@ -160,6 +168,9 @@ function getHeaderValue(
  */
 export function mergedCssGuardPlugin(config: Config): Plugin | null {
   if (!config.detectMergedStylesChange) return null;
+  
+  // Disable when streaming is enabled - shouldCache requires body buffering
+  if (config.streamMissResponses) return null;
 
   return {
     name: 'merged-css-guard',

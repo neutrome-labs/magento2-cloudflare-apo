@@ -2,10 +2,10 @@
 # Copy to .dev.vars for local development
 # For production, set via wrangler.json "vars" or `wrangler secret put`
 #
-# Order matches src/config.ts DEFAULTS
+# Order matches src/types.ts Config interface
 
 # =============================================================================
-# CORE CACHE SETTINGS
+# CACHE TTL SETTINGS
 # =============================================================================
 
 # Cache TTL in seconds (default: 86400 = 24h)
@@ -14,15 +14,26 @@ DEFAULT_TTL=86400
 # Grace period for stale-while-revalidate in seconds (default: 259200 = 72h)
 GRACE_SECONDS=259200
 
-# Hit-for-pass duration for uncacheable responses (default: 120 = 2min)
-HIT_FOR_PASS_SECONDS=120
-
 # Respect Cache-Control: private/no-cache/no-store headers from origin
 RESPECT_PRIVATE_NO_CACHE=false
 RESPECT_CACHE_CONTROL=false
 
+# Hit-for-pass duration for uncacheable responses (default: 120 = 2min)
+HIT_FOR_PASS_SECONDS=120
+
+# =============================================================================
+# CACHE BEHAVIOR
+# =============================================================================
+
 # Cache responses for logged-in users (uses X-Magento-Vary)
 CACHE_LOGGED_IN=true
+
+# Stream MISS responses immediately to client while caching in background
+# Improves TTFB significantly but disables body-dependent plugins:
+#   - origin-links (body replacement)
+#   - merged-css-guard (shouldCache hook)
+# Set to false if you need these plugins on cache MISS
+STREAM_MISS_RESPONSES=true
 
 # =============================================================================
 # PATH PATTERNS
@@ -33,6 +44,10 @@ STATIC_PATH_PATTERN=^/(?:pub/)?(?:media|static)/
 
 # Regex pattern for health check endpoint (bypassed from cache)
 HEALTH_CHECK_PATTERN=^/(?:pub/)?health_check\.php$
+
+# =============================================================================
+# URL HANDLING
+# =============================================================================
 
 # Marketing/tracking params to strip from URLs before caching
 MARKETING_PARAMS=gclid,cx,ie,cof,siteurl,zanpid,origin,fbclid,mc_*,utm_*,_bta_*
@@ -60,6 +75,10 @@ VARY_ON_DEVICE_TYPE=true
 MOBILE_UA_PATTERN=(?:phone|windows\s+phone|ipod|blackberry|(?:android|bb\d+|meego|silk|googlebot) .+? mobile|palm|windows\s+ce|opera mini|avantgo|mobilesafari|docomo|kaios)
 TABLET_UA_PATTERN=(?:ipad|playbook|(?:android|bb\d+|meego|silk)(?! .+? mobile))
 
+# =============================================================================
+# REQUEST/RESPONSE FILTERING
+# =============================================================================
+
 # Cookies allowed to pass to origin
 # Note: VARY_COOKIES are automatically merged into this list
 # Legacy: ALLOWED_COOKIE_NAMES still works for backward compatibility
@@ -80,7 +99,7 @@ CACHEABLE_MIME_TYPES=text/html
 ORIGIN_HOST=
 
 # =============================================================================
-# DEBUG / PLUGINS
+# DEBUG & PLUGINS
 # =============================================================================
 
 # --- Debug Headers Plugin ---

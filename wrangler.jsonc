@@ -9,6 +9,7 @@
 		}
 	],
 	"vars": {
-		"DEBUG": "false"
+		"DEBUG": "false",
+		"STREAM_MISS_RESPONSES": "true"
 	}
 }

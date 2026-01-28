@@ -1,7 +1,7 @@
 import { buildConfig, debugLog } from './config';
 import { createContext, shouldBypass, computeCacheKey } from './context';
 import { readCacheRecord, writeCacheRecord, storeHitForPass, buildCachedResponse } from './cache';
-import { fetchFromOrigin, fetchCacheableResponse, revalidate } from './origin';
+import { fetchFromOrigin, fetchCacheableResponse, fetchStreamingResponse, revalidate } from './origin';
 import { finalizeResponse } from './response';
 import { handlePurgeRequest } from './purge';
 import { createPluginManager, getPlugins } from './plugins';
@@ -91,6 +91,16 @@ export default {
       debugLog(config, 'Cached record expired beyond grace, treating as miss');
     }
 
+    // Use streaming mode for faster TTFB when enabled
+    // Streaming mode disables body-dependent plugins (origin-links, merged-css-guard)
+    if (config.streamMissResponses) {
+      debugLog(config, 'Using streaming response mode');
+      const { response, cachePromise } = await fetchStreamingResponse(context);
+      context.waitUntil(cachePromise);
+      return finalizeResponse(response, context, 'MISS');
+    }
+
+    // Non-streaming mode: buffer body for plugins and cache synchronously
     const { response, cacheResult, skipCache, uncacheableReason } = await fetchCacheableResponse(context);
 
     if (cacheResult) {
