@@ -4,19 +4,26 @@ import { readCacheRecord, writeCacheRecord, storeHitForPass, buildCachedResponse
 import { fetchFromOrigin, fetchCacheableResponse, revalidate } from './origin';
 import { finalizeResponse } from './response';
 import { handlePurgeRequest } from './purge';
-import { verifyMergedCss, getHeaderValue } from './css-verify';
+import { createPluginManager, getPlugins } from './plugins';
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const config = buildConfig(env);
-    const context = createContext(request, env, config);
+    const plugins = createPluginManager(config, getPlugins(config));
+    const context = createContext(request, env, config, plugins, ctx.waitUntil.bind(ctx));
 
     debugLog(config, `Request ${request.method} ${context.originalUrl}`);
 
+    // Handle purge requests
     if (request.method === 'POST' && request.headers.get('X-Purge-Secret')) {
       return handlePurgeRequest(context);
     }
 
+    // Plugin early bypass
+    const pluginResponse = await plugins.runOnRequest(context);
+    if (pluginResponse) return pluginResponse;
+
+    // Core bypass check
     const bypass = shouldBypass(context);
     if (bypass.bypass) {
       debugLog(config, `Bypass: ${bypass.reason}`);
@@ -26,13 +33,16 @@ export default {
       return finalizeResponse(response, context, 'UNCACHEABLE');
     }
 
-    const cacheKey = computeCacheKey(context);
+    // Compute cache key (core + plugins)
+    const baseKey = computeCacheKey(context);
+    const cacheKey = plugins.runTransformCacheKey(baseKey, context);
     context.cacheKey = cacheKey;
     debugLog(config, `Cache key => ${cacheKey}`);
 
     const record = await readCacheRecord(env.FPC_CACHE, cacheKey);
     const now = Date.now();
 
+    // Hit-for-pass active
     if (record?.state === 'pass' && record.expires > now) {
       debugLog(config, `Hit-for-pass active (${record.expires - now}ms remaining)`);
       context.claims.push('cache:hfp');
@@ -40,47 +50,44 @@ export default {
       return finalizeResponse(response, context, 'UNCACHEABLE');
     }
 
-    if (record?.state === 'cache') {
-      if (record.expires > now) {
-        debugLog(config, `Cache HIT, ttl left ${((record.expires - now) / 1000) | 0}s`);
-        
-        // Verify merged CSS assets for HTML if enabled
-        const contentType = (getHeaderValue(record.headers, 'Content-Type') || '').toLowerCase();
-        if (config.detectMergedStylesChanges && contentType.includes('text/html')) {
-          const check = await verifyMergedCss(record.body || '', context);
-          if (!check.ok) {
-            // CSS assets missing, store hit-for-pass and fetch fresh
-            await storeHitForPass(env.FPC_CACHE, cacheKey, context);
-            context.claims.push('cache:hfp-store');
-            const response = await fetchFromOrigin(context);
-            return finalizeResponse(response, context, 'MISS');
-          }
-        }
-        
-        return buildCachedResponse(record, context, 'HIT');
+    // Cache HIT
+    if (record?.state === 'cache' && record.expires > now) {
+      debugLog(config, `Cache HIT, ttl left ${((record.expires - now) / 1000) | 0}s`);
+
+      // Plugin validation (e.g., CSS guard)
+      const valid = await plugins.runValidateCacheHit(record, context);
+      if (!valid) {
+        // Plugin declined this cached record - delete it and fetch fresh
+        await env.FPC_CACHE.delete(cacheKey);
+        context.claims.push('cache:invalidated');
+        const response = await fetchFromOrigin(context);
+        return finalizeResponse(response, context, 'MISS');
       }
 
-      if (record.staleUntil && record.staleUntil > now) {
-        debugLog(config, `Cache STALE, grace left ${((record.staleUntil - now) / 1000) | 0}s`);
-        context.claims.push('cache:stale');
-        
-        // Verify merged CSS assets for HTML if enabled
-        const contentType = (getHeaderValue(record.headers, 'Content-Type') || '').toLowerCase();
-        if (config.detectMergedStylesChanges && contentType.includes('text/html')) {
-          const check = await verifyMergedCss(record.body || '', context);
-          if (!check.ok) {
-            // CSS assets missing, store hit-for-pass and fetch fresh synchronously
-            await storeHitForPass(env.FPC_CACHE, cacheKey, context);
-            context.claims.push('cache:hfp-store');
-            const response = await fetchFromOrigin(context);
-            return finalizeResponse(response, context, 'MISS');
-          }
-        }
-        
-        ctx.waitUntil(revalidate(context, record));
-        return buildCachedResponse(record, context, 'STALE');
+      return buildCachedResponse(record, context, 'HIT');
+    }
+
+    // Cache STALE (serve stale, revalidate in background)
+    if (record?.state === 'cache' && record.staleUntil && record.staleUntil > now) {
+      debugLog(config, `Cache STALE, grace left ${((record.staleUntil - now) / 1000) | 0}s`);
+      context.claims.push('cache:stale');
+
+      // Plugin validation
+      const valid = await plugins.runValidateCacheHit(record, context);
+      if (!valid) {
+        // Plugin declined this cached record - delete it and fetch fresh
+        await env.FPC_CACHE.delete(cacheKey);
+        context.claims.push('cache:invalidated');
+        const response = await fetchFromOrigin(context);
+        return finalizeResponse(response, context, 'MISS');
       }
 
+      context.waitUntil(revalidate(context, record));
+      return buildCachedResponse(record, context, 'STALE');
+    }
+
+    // Cache MISS - fetch from origin
+    if (record) {
       debugLog(config, 'Cached record expired beyond grace, treating as miss');
     }
 

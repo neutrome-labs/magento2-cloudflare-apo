@@ -17,8 +17,41 @@ src/
 ├── cache.ts      # KV operations (read/write), cached response building
 ├── origin.ts     # Origin fetching, cacheability decisions
 ├── response.ts   # Response finalization, header sanitization
-└── purge.ts      # Cache purge endpoint handling
+├── purge.ts      # Cache purge endpoint handling
+└── plugins/      # Extensible plugin system
+    ├── index.ts           # Plugin exports
+    ├── types.ts           # Plugin interface definitions
+    ├── runtime.ts         # Plugin manager implementation
+    ├── registry.ts        # Plugin registration (edit to add custom plugins)
+    ├── debug-headers.ts   # Debug headers (X-FPC-Cache, X-APO-Claims)
+    ├── origin-links.ts    # Origin link replacement in responses
+    └── merged-css-guard.ts # Merged CSS asset validation
 ```
+
+## Plugin System
+
+Plugins provide extensibility without modifying core code. Each plugin can hook into:
+- `onRequest` - Early bypass/short-circuit
+- `transformCacheKey` - Modify cache key
+- `transformOriginRequest` - Modify request to origin
+- `validateCacheHit` - Validate cached records before serving
+- `shouldCache` - Decide if origin response should be cached
+- `transformResponse` - Modify final response
+
+### Built-in Plugins
+
+| Plugin | Enable Flag | Purpose |
+|--------|-------------|---------|
+| `debug-headers` | `DEBUG=true` | Adds X-FPC-Cache, X-Magento-Cache-Debug headers |
+| `cache-claims` | `RETURN_CLAIMS=true` | Adds X-APO-Claims header with request details |
+| `origin-links` | `REPLACE_ORIGIN_LINKS=true` | Replaces ORIGIN_HOST in responses |
+| `merged-css-guard` | `DETECT_MERGED_STYLES_CHANGE=true` | Validates merged CSS assets exist |
+
+### Adding Custom Plugins
+
+1. Create plugin file in `src/plugins/` implementing `Plugin` interface
+2. Import and add to `PLUGINS` array in `src/plugins/registry.ts`
+3. Plugins run in array order
 
 ## Key Patterns
 
@@ -33,14 +66,15 @@ Request → createContext() → shouldBypass() → computeCacheKey() → cache c
 ```
 
 ### Module Dependencies
-- `types.ts` - No dependencies (pure types)
+- `types.ts` - Imports `plugins/types` for PluginManager
 - `config.ts` - Depends on `types`
-- `context.ts` - Depends on `types`
+- `context.ts` - Depends on `types`, `plugins/types`
 - `response.ts` - Depends on `types`
 - `cache.ts` - Depends on `types`, `response`
 - `origin.ts` - Depends on `types`, `config`, `cache`
-- `purge.ts` - Depends on `types`
-- `index.ts` - Orchestrates all modules
+- `purge.ts` - Depends on `types`, `context`
+- `plugins/*` - Depend on `types`, `config` (never on other core modules except via Context)
+- `index.ts` - Orchestrates all modules including plugins
 
 ## Important Files
 

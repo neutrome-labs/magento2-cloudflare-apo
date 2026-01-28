@@ -1,8 +1,9 @@
 import type { Config, Context, BypassResult } from './types';
+import type { PluginManager } from './plugins';
 
 export const CACHE_PREFIX = 'fpc:';
 
-export function createContext(request: Request, env: Env, config: Config): Context {
+export function createContext(request: Request, env: Env, config: Config, plugins: PluginManager, waitUntil: (p: Promise<unknown>) => void): Context {
   const url = new URL(request.url);
   const normalized = normalizeUrl(url, config);
   const headers = request.headers;
@@ -16,27 +17,35 @@ export function createContext(request: Request, env: Env, config: Config): Conte
   }
 
   return {
-    request,
     env,
     config,
-    claims,
+    plugins,
+
+    request,
+    cacheKey: null,
+    
     originalUrl: url.href,
     url: normalized.url,
     pathname: normalized.pathname,
     search: normalized.search,
     marketingRemoved: normalized.marketingRemoved,
+
     cookieHeader: headers.get('Cookie') || '',
     sslOffloaded: headers.get('CF-Visitor') || headers.get('X-Forwarded-Proto') || '',
     isStatic: config.staticPathPattern.test(normalized.pathname),
     isHealthCheck: config.healthCheckPattern.test(normalized.pathname),
     isGraphql,
+    
     magentoCacheId,
     hasAuthToken: /^Bearer\s+/i.test(authHeader),
     authHeader,
     store: headers.get('Store') || headers.get('X-Store') || '',
     currency: headers.get('Content-Currency') || headers.get('X-Currency') || '',
-    cacheKey: null,
-    isBypassed: false
+    
+    isBypassed: false,
+    claims,
+    
+    waitUntil
   };
 }
 

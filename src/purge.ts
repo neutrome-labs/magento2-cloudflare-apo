@@ -7,7 +7,7 @@ import { computeCacheKey } from './context';
  * Use X-Purge-All: true header to purge entire cache
  */
 export async function handlePurgeRequest(context: Context): Promise<Response> {
-  const { request, config, env } = context;
+  const { request, config, env, plugins } = context;
   const providedSecret = request.headers.get('X-Purge-Secret') || '';
 
   if (!config.purgeSecret || providedSecret !== config.purgeSecret) {
@@ -19,8 +19,9 @@ export async function handlePurgeRequest(context: Context): Promise<Response> {
     return await purgeAllKeys(env);
   }
 
-  // Purge the cache key for this URL
-  const cacheKey = computeCacheKey(context);
+  // Compute cache key using same pipeline as normal requests (core + plugins)
+  const baseKey = computeCacheKey(context);
+  const cacheKey = plugins.runTransformCacheKey(baseKey, context);
   await env.FPC_CACHE.delete(cacheKey);
 
   return new Response(JSON.stringify({

@@ -11,7 +11,7 @@ const CONFIG = {
   cacheLoggedIn: true,
   debug: false,
   returnClaims: true,
-  detectMergedStylesChanges: false,
+  detectMergedStylesChange: false,
   mergedStylesCheckTtlSeconds: 60,
   purgeSecret: 'replace-me',
   staticPathPattern: /^\/(?:pub\/)?(?:media|static)\//,
@@ -114,7 +114,7 @@ async function handleRequest(event) {
       // If enabled and HTML, validate merged CSS assets even for cache HIT
       try {
         const contentType = (getHeaderValue(record.headers, 'Content-Type') || '').toLowerCase();
-        if (config.detectMergedStylesChanges && contentType.includes('text/html')) {
+        if (config.detectMergedStylesChange && contentType.includes('text/html')) {
           const check = await verifyMergedCss(record.body || '', context);
           if (!check.ok) {
             // Replace cached entry with hit-for-pass and fetch fresh using shared revalidation
@@ -137,7 +137,7 @@ async function handleRequest(event) {
       // If enabled and HTML, proactively validate merged CSS for stale too; if missing, sync revalidate and bypass
       try {
         const contentType = (getHeaderValue(record.headers, 'Content-Type') || '').toLowerCase();
-        if (config.detectMergedStylesChanges && contentType.includes('text/html')) {
+        if (config.detectMergedStylesChange && contentType.includes('text/html')) {
           const check = await verifyMergedCss(record.body || '', context);
           if (!check.ok) {
             await storeHitForPass(cacheKey, context);
@@ -293,7 +293,7 @@ function getHeaderValue(headersObject, name) {
 
 async function verifyMergedCss(html, context) {
   const { config } = context;
-  if (!config.detectMergedStylesChanges) return { ok: true, count: 0 };
+  if (!config.detectMergedStylesChange) return { ok: true, count: 0 };
   const baseUrl = context.url.toString();
   const cssLinks = extractMergedCssLinks(html, baseUrl);
   if (!cssLinks.length) return { ok: true, count: 0 };
@@ -527,7 +527,7 @@ async function fetchCacheableResponse(event, context, previousRecord) {
 
   // If enabled, verify merged CSS assets referenced by HTML exist (status 200); if not, bypass and set hit-for-pass.
   const contentType = (headers.get('Content-Type') || '').toLowerCase();
-  if (config.detectMergedStylesChanges && contentType.includes('text/html')) {
+  if (config.detectMergedStylesChange && contentType.includes('text/html')) {
     const check = await verifyMergedCss(bodyText, context);
     if (!check.ok) {
       return { response, skipCache: true, uncacheableReason: 'hit-for-pass' };

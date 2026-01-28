@@ -1,10 +1,10 @@
 import type { Context, CacheRecord, FetchResult } from './types';
 import { debugLog } from './config';
 import { writeCacheRecord } from './cache';
-import { verifyMergedCss } from './css-verify';
 
 export async function fetchFromOrigin(context: Context): Promise<Response> {
-  const request = buildOriginRequest(context);
+  let request = buildOriginRequest(context);
+  request = await context.plugins.runTransformOriginRequest(request, context);
   debugLog(context.config, `Fetching from origin: ${request.url}`);
   return fetch(request);
 }
@@ -42,7 +42,7 @@ function buildOriginRequest(context: Context): Request {
     if (isStatic) {
       headers.delete('Cookie');
     } else {
-      const allowlist = new Set(config.allowedCookieNames.map(name => name.toLowerCase()));
+      const allowlist = new Set(config.cacheableCookieNames.map(name => name.toLowerCase()));
       const parsed = cookieHeader.split(';').map(chunk => chunk.trim()).filter(Boolean);
       const kept: string[] = [];
 
@@ -95,6 +95,14 @@ export async function fetchCacheableResponse(context: Context): Promise<FetchRes
 
   if (setCookie) headers.delete('Set-Cookie');
 
+  // Check if content-type is cacheable
+  const contentType = (headers.get('Content-Type') || '').toLowerCase();
+  const isCacheableMime = config.cacheableMimeTypes.some(mime => contentType.includes(mime.toLowerCase()));
+  if (!isCacheableMime) {
+    debugLog(config, `Skipping cache: content-type '${contentType}' not in cacheableMimeTypes`);
+    return { response, skipCache: true, uncacheableReason: 'content-type' };
+  }
+
   if (headers.get('X-Magento-Debug')) {
     headers.set('X-Magento-Cache-Control', cacheControl);
   }
@@ -115,13 +123,13 @@ export async function fetchCacheableResponse(context: Context): Promise<FetchRes
     }
   }
 
-  // Verify merged CSS assets for HTML responses if enabled
-  const contentType = (headers.get('Content-Type') || '').toLowerCase();
-  if (config.detectMergedStylesChanges && contentType.includes('text/html')) {
-    const check = await verifyMergedCss(bodyText, context);
-    if (!check.ok) {
-      return { response, skipCache: true, uncacheableReason: 'hit-for-pass' };
-    }
+  // Run plugin shouldCache hook
+  const pluginDecision = await context.plugins.runShouldCache(response, bodyText, context);
+  if (pluginDecision === false) {
+    return { response, skipCache: true, uncacheableReason: 'plugin-blocked' };
+  }
+  if (pluginDecision === 'hit-for-pass') {
+    return { response, skipCache: true, uncacheableReason: 'hit-for-pass' };
   }
 
   const expires = Date.now() + ttlSeconds * 1000;

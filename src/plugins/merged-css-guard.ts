@@ -1,13 +1,14 @@
-import type { Context } from './types';
-import { debugLog } from './config';
+import type { Config, Context } from '../types';
+import type { Plugin } from '.';
+import { debugLog } from '../config';
 
-export const ASSET_OK_PREFIX = 'assetok:';
+const ASSET_OK_PREFIX = 'assetok:';
 
 /**
  * Extract Magento merged CSS links from HTML
  * e.g., /static/version1762259560/_cache/merged/<hash>.min.css
  */
-export function extractMergedCssLinks(html: string, baseUrl: string): string[] {
+function extractMergedCssLinks(html: string, baseUrl: string): string[] {
   if (!html) return [];
 
   const results = new Set<string>();
@@ -75,7 +76,7 @@ async function checkAssetOk(
   return { ok, cached: false };
 }
 
-export interface CssVerifyResult {
+interface CssVerifyResult {
   ok: boolean;
   count: number;
   failed?: number;
@@ -85,13 +86,13 @@ export interface CssVerifyResult {
  * Verify that all merged CSS assets referenced in HTML exist (return 200)
  * If any are missing, returns ok: false to trigger cache invalidation
  */
-export async function verifyMergedCss(
+async function verifyMergedCss(
   html: string,
   context: Context
 ): Promise<CssVerifyResult> {
   const { config } = context;
 
-  if (!config.detectMergedStylesChanges) {
+  if (!config.detectMergedStylesChange) {
     return { ok: true, count: 0 };
   }
 
@@ -138,7 +139,7 @@ export async function verifyMergedCss(
 /**
  * Get Content-Type header value from a headers object (case-insensitive)
  */
-export function getHeaderValue(
+function getHeaderValue(
   headersObject: Record<string, string> | undefined,
   name: string
 ): string | undefined {
@@ -150,4 +151,42 @@ export function getHeaderValue(
     if (key.toLowerCase() === target) return headersObject[key];
   }
   return undefined;
+}
+
+/**
+ * Merged CSS Guard Plugin
+ * Validates that merged CSS assets referenced in HTML still exist (return 200).
+ * If any are missing, blocks caching to prevent serving broken pages.
+ */
+export function mergedCssGuardPlugin(config: Config): Plugin | null {
+  if (!config.detectMergedStylesChange) return null;
+
+  return {
+    name: 'merged-css-guard',
+
+    async validateCacheHit(record, ctx) {
+      const contentType = getHeaderValue(record.headers, 'Content-Type') || '';
+      if (!contentType.includes('text/html')) return true;
+
+      const check = await verifyMergedCss(record.body || '', ctx);
+      if (!check.ok) {
+        debugLog(config, `CSS guard: invalidating cache hit (${check.failed}/${check.count} assets missing)`);
+        return false;
+      }
+      return true;
+    },
+
+    async shouldCache(_response, bodyText, ctx) {
+      const contentType = ctx.request.headers.get('Accept') || '';
+      // Only check HTML responses
+      if (!contentType.includes('text/html')) return true;
+
+      const check = await verifyMergedCss(bodyText, ctx);
+      if (!check.ok) {
+        debugLog(config, `CSS guard: blocking cache (${check.failed}/${check.count} assets missing)`);
+        return 'hit-for-pass';
+      }
+      return true;
+    }
+  };
 }

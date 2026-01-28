@@ -1,24 +1,12 @@
-# Magento 2 FPC Worker - Environment Variables
+# Magento 2 APO - Environment Variables
 # Copy to .dev.vars for local development
 # For production, set via wrangler.json "vars" or `wrangler secret put`
+#
+# Order matches src/config.ts DEFAULTS
 
-# Optional: Rewrite origin host for all backend requests
-# Useful for proxying domain.com to a different backend server
-# Can include protocol to force http/https (e.g., https://backend.example.com)
-# Leave empty to use the request's original host and protocol
-# ORIGIN_HOST=backend.example.com
-# ORIGIN_HOST=https://backend.example.com
-ORIGIN_HOST=
-
-# Replace links to ORIGIN_HOST in responses with the request domain
-# Useful when proxying to a backend that generates absolute URLs
-REPLACE_ORIGIN_LINKS=false
-
-# Required - set via `wrangler secret put PURGE_SECRET`
-PURGE_SECRET=your-secure-purge-secret
-
-# Debug mode - logs to console
-DEBUG=true
+# =============================================================================
+# CORE CACHE SETTINGS
+# =============================================================================
 
 # Cache TTL in seconds (default: 86400 = 24h)
 DEFAULT_TTL=86400
@@ -29,57 +17,95 @@ GRACE_SECONDS=259200
 # Hit-for-pass duration for uncacheable responses (default: 120 = 2min)
 HIT_FOR_PASS_SECONDS=120
 
-# Respect Cache-Control: private/no-cache/no-store headers
+# Respect Cache-Control: private/no-cache/no-store headers from origin
 RESPECT_PRIVATE_NO_CACHE=false
 RESPECT_CACHE_CONTROL=false
 
 # Cache responses for logged-in users (uses X-Magento-Vary)
 CACHE_LOGGED_IN=true
 
-# Return X-APO-Claims header showing request handling details
-RETURN_CLAIMS=true
+# =============================================================================
+# PATH PATTERNS
+# =============================================================================
+
+# Regex patterns for static assets (bypassed from cache)
+STATIC_PATH_PATTERN=^/(?:pub/)?(?:media|static)/
+
+# Regex pattern for health check endpoint (bypassed from cache)
+HEALTH_CHECK_PATTERN=^/(?:pub/)?health_check\.php$
+
+# Marketing/tracking params to strip from URLs before caching
+MARKETING_PARAMS=gclid,cx,ie,cof,siteurl,zanpid,origin,fbclid,mc_*,utm_*,_bta_*
+
+# Paths to exclude from caching (substring match)
+EXCLUDED_PATHS=/admin,/customer,/section/load,/checkout,/wishlist,/cart,/sales,/rest/,/onestepcheckout,/password
 
 # GraphQL endpoint path
 GRAPHQL_PATH=/graphql
 
-# Regex patterns (escape backslashes)
-STATIC_PATH_PATTERN=^/(?:pub/)?(?:media|static)/
-HEALTH_CHECK_PATTERN=^/(?:pub/)?health_check\.php$
+# =============================================================================
+# CACHE KEY VARIATION
+# =============================================================================
 
-# Comma-separated arrays - paths/params to exclude or strip
-MARKETING_PARAMS=gclid,cx,ie,cof,siteurl,zanpid,origin,fbclid,mc_*,utm_*,_bta_*
-EXCLUDED_PATHS=/admin,/customer,/section/load,/checkout,/wishlist,/cart,/sales,/rest/,/onestepcheckout,/password
-
-# Cookies used for cache variation
+# Cookies used for cache key variation
 VARY_COOKIES=X-Magento-Vary
 
-# Headers used for cache variation (e.g., Accept-Language)
-# Note: For device type variation, use VARY_ON_DEVICE_TYPE instead of CF-Device-Type header
+# Headers used for cache key variation (e.g., Accept-Language)
 VARY_HEADERS=
 
 # Device type detection from User-Agent (separates mobile/tablet/desktop caches)
-# Set to false to disable device-based cache separation
 VARY_ON_DEVICE_TYPE=true
 
 # User-Agent regex patterns for device detection (case-insensitive)
-# Mobile: phones, mobile browsers
 MOBILE_UA_PATTERN=(?:phone|windows\s+phone|ipod|blackberry|(?:android|bb\d+|meego|silk|googlebot) .+? mobile|palm|windows\s+ce|opera mini|avantgo|mobilesafari|docomo|kaios)
-# Tablet: tablets that don't match mobile pattern
 TABLET_UA_PATTERN=(?:ipad|playbook|(?:android|bb\d+|meego|silk)(?! .+? mobile))
-# Desktop: everything else not matched by mobile or tablet patterns
 
 # Cookies allowed to pass to origin
 # Note: VARY_COOKIES are automatically merged into this list
-ALLOWED_COOKIE_NAMES=X-Magento-Vary,store,currency,form_key,private_content_version,section_data_ids,mage-cache-sessid,mage-cache-storage,mage-cache-storage-section-invalidation,mage-messages
+# Legacy: ALLOWED_COOKIE_NAMES still works for backward compatibility
+CACHEABLE_COOKIE_NAMES=X-Magento-Vary,store,currency,form_key,private_content_version,section_data_ids,mage-cache-sessid,mage-cache-storage,mage-cache-storage-section-invalidation,mage-messages
 
 # Response content types to cache
-INCLUDED_RESPONSE_TYPES=text/html
-#INCLUDED_RESPONSE_TYPES=text/html,text/css,text/javascript,application/javascript
+# Legacy: INCLUDED_RESPONSE_TYPES still works for backward compatibility
+CACHEABLE_MIME_TYPES=text/html
+#CACHEABLE_MIME_TYPES=text/html,text/css,text/javascript,application/javascript
 
-# Merged CSS/Styles Change Detection
-# When enabled, verifies that merged CSS assets referenced in cached HTML still exist (return 200)
-# If any are missing (e.g., after deployment), triggers cache invalidation and fresh fetch
-DETECT_MERGED_STYLES_CHANGES=false
+# =============================================================================
+# ORIGIN SETTINGS
+# =============================================================================
 
-# TTL in seconds for caching merged CSS asset existence checks (HEAD request results)
+# Rewrite origin host for all backend requests
+# Can include protocol (e.g., https://backend.example.com)
+# Leave empty to use the request's original host
+ORIGIN_HOST=
+
+# =============================================================================
+# DEBUG / PLUGINS
+# =============================================================================
+
+# --- Debug Headers Plugin ---
+# Adds debug headers (X-FPC-Cache, X-Magento-Cache-Debug, etc.) to responses
+DEBUG=false
+
+# --- Cache Claims Plugin ---
+# Adds X-APO-Claims header showing request handling details (independent of DEBUG)
+RETURN_CLAIMS=true
+
+# --- Origin Links Plugin ---
+# Replace ORIGIN_HOST references in responses with the request domain
+REPLACE_ORIGIN_LINKS=false
+
+# --- Merged CSS Guard Plugin ---
+# Verify merged CSS assets in cached HTML still exist (return 200)
+# If missing (e.g., after deployment), triggers cache invalidation
+DETECT_MERGED_STYLES_CHANGE=false
+
+# TTL for caching CSS asset HEAD request results
 MERGED_STYLES_CHECK_TTL_SECONDS=60
+
+# =============================================================================
+# SECRETS (use wrangler secret put)
+# =============================================================================
+
+# Required for cache purge endpoint
+PURGE_SECRET=your-secure-purge-secret

@@ -12,5 +12,5 @@ dist/
 # Client-specific configurations (all subfolders except src/)
 */
 !src/
-
+!src/**/
 

@@ -1,54 +1,72 @@
+import type { PluginManager } from './plugins';
+
 export interface Config {
-  originHost: string | null;
-  originProtocol: string | null;
   defaultTtl: number;
   graceSeconds: number;
   respectPrivateNoCache: boolean;
   respectCacheControl: boolean;
   hitForPassSeconds: number;
+
   cacheLoggedIn: boolean;
-  debug: boolean;
-  returnClaims: boolean;
-  purgeSecret: string;
+
   staticPathPattern: RegExp;
   healthCheckPattern: RegExp;
+
   marketingParams: string[];
   excludedPaths: string[];
   graphqlPath: string;
+
   varyCookies: string[];
   varyHeaders: string[];
   varyOnDeviceType: boolean;
   mobileUaPattern: RegExp;
   tabletUaPattern: RegExp;
-  allowedCookieNames: string[];
-  includedResponseTypes: string[];
+
+  cacheableCookieNames: string[];
+  cacheableMimeTypes: string[];
+  
+  originHost: string | null;
+  originProtocol: string | null;
+  
+  debug: boolean;
+  returnClaims: boolean;
   replaceOriginLinks: boolean;
-  detectMergedStylesChanges: boolean;
+  detectMergedStylesChange: boolean;
   mergedStylesCheckTtlSeconds: number;
+
+  purgeSecret: string;
 }
 
 export interface Context {
-  request: Request;
   env: Env;
   config: Config;
-  claims: string[];
+  plugins: PluginManager;
+
+  request: Request;
+  cacheKey: string | null;
+  
   originalUrl: string;
   url: URL;
   pathname: string;
   search: string;
   marketingRemoved: string[];
-  cookieHeader: string;
-  sslOffloaded: string;
+  
   isStatic: boolean;
   isHealthCheck: boolean;
   isGraphql: boolean;
+
+  cookieHeader: string;
+  sslOffloaded: string;
   magentoCacheId: string;
   hasAuthToken: boolean;
   authHeader: string;
   store: string;
   currency: string;
-  cacheKey: string | null;
+  
+  claims: string[];
   isBypassed: boolean;
+  
+  waitUntil: (promise: Promise<unknown>) => void;
 }
 
 export interface CacheRecord {

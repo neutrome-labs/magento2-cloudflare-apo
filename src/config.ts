@@ -19,10 +19,10 @@ export const DEFAULTS = {
   VARY_ON_DEVICE_TYPE: true,
   MOBILE_UA_PATTERN: '(?:phone|windows\\s+phone|ipod|blackberry|(?:android|bb\\d+|meego|silk|googlebot) .+? mobile|palm|windows\\s+ce|opera mini|avantgo|mobilesafari|docomo|kaios)',
   TABLET_UA_PATTERN: '(?:ipad|playbook|(?:android|bb\\d+|meego|silk)(?! .+? mobile))',
-  ALLOWED_COOKIE_NAMES: ['X-Magento-Vary', 'store', 'currency', 'form_key', 'private_content_version', 'section_data_ids', 'mage-cache-sessid', 'mage-cache-storage', 'mage-cache-storage-section-invalidation', 'mage-messages'],
-  INCLUDED_RESPONSE_TYPES: ['text/html', 'text/css', 'text/javascript', 'application/javascript'],
+  CACHEABLE_COOKIE_NAMES: ['X-Magento-Vary', 'store', 'currency', 'form_key', 'private_content_version', 'section_data_ids', 'mage-cache-sessid', 'mage-cache-storage', 'mage-cache-storage-section-invalidation', 'mage-messages'],
+  CACHEABLE_MIME_TYPES: ['text/html', 'text/css', 'text/javascript', 'application/javascript'],
   REPLACE_ORIGIN_LINKS: false,
-  DETECT_MERGED_STYLES_CHANGES: false,
+  DETECT_MERGED_STYLES_CHANGE: false,
   MERGED_STYLES_CHECK_TTL_SECONDS: 60
 } as const;
 
@@ -59,9 +59,10 @@ function parseOriginHost(val: string | undefined): { host: string | null; protoc
 export function buildConfig(env: Env): Config {
   const origin = parseOriginHost(env.ORIGIN_HOST);
   const varyCookies = envArray(env.VARY_COOKIES, DEFAULTS.VARY_COOKIES);
-  const allowedCookieNames = envArray(env.ALLOWED_COOKIE_NAMES, DEFAULTS.ALLOWED_COOKIE_NAMES);
-  // Merge VARY_COOKIES into ALLOWED_COOKIE_NAMES to avoid manual double-config
-  const mergedAllowedCookies = [...new Set([...allowedCookieNames, ...varyCookies])];
+  // Support both new and old env var names for backward compatibility
+  const cacheableCookieNames = envArray(env.CACHEABLE_COOKIE_NAMES || env.ALLOWED_COOKIE_NAMES, DEFAULTS.CACHEABLE_COOKIE_NAMES);
+  // Merge VARY_COOKIES into CACHEABLE_COOKIE_NAMES to avoid manual double-config
+  const mergedCacheableCookies = [...new Set([...cacheableCookieNames, ...varyCookies])];
   
   return {
     originHost: origin.host,
@@ -85,10 +86,11 @@ export function buildConfig(env: Env): Config {
     varyOnDeviceType: envBool(env.VARY_ON_DEVICE_TYPE, DEFAULTS.VARY_ON_DEVICE_TYPE),
     mobileUaPattern: new RegExp(env.MOBILE_UA_PATTERN || DEFAULTS.MOBILE_UA_PATTERN, 'i'),
     tabletUaPattern: new RegExp(env.TABLET_UA_PATTERN || DEFAULTS.TABLET_UA_PATTERN, 'i'),
-    allowedCookieNames: mergedAllowedCookies,
-    includedResponseTypes: envArray(env.INCLUDED_RESPONSE_TYPES, DEFAULTS.INCLUDED_RESPONSE_TYPES),
+    cacheableCookieNames: mergedCacheableCookies,
+    // Support both new and old env var names for backward compatibility
+    cacheableMimeTypes: envArray(env.CACHEABLE_MIME_TYPES || env.INCLUDED_RESPONSE_TYPES, DEFAULTS.CACHEABLE_MIME_TYPES),
     replaceOriginLinks: envBool(env.REPLACE_ORIGIN_LINKS, DEFAULTS.REPLACE_ORIGIN_LINKS),
-    detectMergedStylesChanges: envBool(env.DETECT_MERGED_STYLES_CHANGES, DEFAULTS.DETECT_MERGED_STYLES_CHANGES),
+    detectMergedStylesChange: envBool(env.DETECT_MERGED_STYLES_CHANGE, DEFAULTS.DETECT_MERGED_STYLES_CHANGE),
     mergedStylesCheckTtlSeconds: envInt(env.MERGED_STYLES_CHECK_TTL_SECONDS, DEFAULTS.MERGED_STYLES_CHECK_TTL_SECONDS)
   };
 }

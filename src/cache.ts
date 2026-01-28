@@ -19,7 +19,7 @@ export async function storeHitForPass(kv: KVNamespace, cacheKey: string, context
   await kv.put(cacheKey, JSON.stringify(record), { expirationTtl: ttlSeconds });
 }
 
-export function buildCachedResponse(record: CacheRecord, context: Context, status: string): Response {
+export async function buildCachedResponse(record: CacheRecord, context: Context, status: string): Promise<Response> {
   const headers = new Headers(record.headers || {});
   headers.set('X-FPC-Cache', status);
   if (status === 'STALE') headers.set('X-FPC-Grace', 'normal');
