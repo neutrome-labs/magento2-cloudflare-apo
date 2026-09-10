@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+ <event name="clean_cache_by_tags"><observer name="merchantduo_cloudflare_apo_queue_tags" instance="MerchantDuo\CloudflareApo\Observer\QueueMagentoPurge"/></event>
+ <event name="clean_media_cache_after"><observer name="merchantduo_cloudflare_apo_queue_full_flush" instance="MerchantDuo\CloudflareApo\Observer\QueueFullPurge"/></event>
+</config>

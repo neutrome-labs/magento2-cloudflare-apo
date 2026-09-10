@@ -1,0 +1,45 @@
+/** Magento writes this data-only artifact before deploying the Worker. */
+export const projectConfig = {
+  schema: "magento2-cloudflare-apo/v3",
+  siteId: "default",
+  origin: { host: "origin.example.test", protocol: "https:" },
+  cache: {
+    ttlSeconds: 86400,
+    staleSeconds: 259200,
+    statuses: [200, 404],
+    mimeTypes: ["text/html"],
+  },
+  request: {
+    marketingParameters: ["gclid", "fbclid", "utm_*", "mc_*", "_bta_*"],
+    excludedPathPrefixes: [
+      "/admin",
+      "/customer",
+      "/checkout",
+      "/cart",
+      "/wishlist",
+      "/sales",
+      "/rest/",
+      "/onestepcheckout",
+      "/password",
+      "/section/load",
+    ],
+    staticPathPrefixes: ["/media/", "/static/", "/pub/media/", "/pub/static/"],
+    healthPathPrefixes: ["/health_check.php", "/pub/health_check.php"],
+    varyCookies: ["X-Magento-Vary"],
+    varyHeaders: [],
+    allowOriginCookies: ["X-Magento-Vary", "store", "currency"],
+    varyOnDevice: true,
+    graphqlPath: "/graphql",
+  },
+  plugins: {
+    debugHeaders: false,
+    returnClaims: true,
+    replaceOriginLinks: false,
+    mergedCssGuard: false,
+  },
+  purge: {
+    path: "/__fpc/purge",
+    maxClockSkewSeconds: 300,
+    maxItemsPerRequest: 100,
+  },
+} as const;

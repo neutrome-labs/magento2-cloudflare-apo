@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <merchantduo_cloudflare_apo>
+            <general><enabled>0</enabled><purge_path>/__fpc/purge</purge_path></general>
+            <deployment><mode>local</mode></deployment>
+            <logging><api_requests>0</api_requests><api_responses>0</api_responses></logging>
+            <cache><ttl>86400</ttl><stale>259200</stale><statuses>200,404</statuses><mime_types>text/html</mime_types></cache>
+            <request><marketing_parameters>gclid,fbclid,utm_*,mc_*,_bta_*</marketing_parameters><vary_cookies>X-Magento-Vary</vary_cookies><vary_headers></vary_headers><vary_on_device>1</vary_on_device><graphql_path>/graphql</graphql_path></request>
+        </merchantduo_cloudflare_apo>
+    </default>
+</config>

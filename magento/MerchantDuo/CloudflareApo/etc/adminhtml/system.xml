@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="merchantduo_cloudflare_apo" translate="label" sortOrder="900" showInDefault="1" showInWebsite="1" showInStore="0">
+            <label>Cloudflare APO v3</label>
+            <tab>service</tab>
+            <resource>MerchantDuo_CloudflareApo::config</resource>
+            <group id="general" translate="label" sortOrder="10" showInDefault="1" showInWebsite="1">
+                <label>Worker and Purge</label>
+                <field id="enabled" type="select" sortOrder="10" showInDefault="1" showInWebsite="1"><label>Enable purge delivery</label><source_model>Magento\Config\Model\Config\Source\Yesno</source_model><comment>Queues Magento cache invalidations for the configured Worker. Enable only after its purge secret is configured.</comment></field>
+                <field id="worker_url" type="text" sortOrder="20" showInDefault="1" showInWebsite="1"><label>Worker HTTPS URL</label><validate>validate-url</validate><comment>Public HTTPS URL serving this website through the Worker, for example https://shop.example.com.</comment></field>
+                <field id="route" type="text" sortOrder="30" showInDefault="1" showInWebsite="1"><label>Optional Worker route or custom domain</label><comment>Cloudflare route or custom domain assigned to this Worker; retained for deployment diagnostics.</comment></field>
+                <field id="purge_secret" type="obscure" sortOrder="40" showInDefault="1" showInWebsite="1"><label>Purge signing secret</label><backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model><comment>Shared random secret for signed purge requests. Set the same value as the Worker PURGE_SECRET binding.</comment></field>
+                <field id="purge_path" type="text" sortOrder="50" showInDefault="1" showInWebsite="1"><label>Worker purge path</label><comment>Signed purge endpoint path exposed by the Worker. Leave the default unless the Worker configuration changes it.</comment></field>
+            </group>
+            <group id="cloudflare" translate="label" sortOrder="20" showInDefault="1" showInWebsite="1">
+                <label>Cloudflare API</label>
+                <field id="account_id" type="text" sortOrder="10" showInDefault="1" showInWebsite="1"><label>Account ID</label><validate>required-entry</validate><comment>Cloudflare account identifier, available in the account dashboard URL or Workers &amp; Pages overview.</comment></field>
+                <field id="worker_name" type="text" sortOrder="20" showInDefault="1" showInWebsite="1"><label>Worker name</label><validate>required-entry</validate><comment>Exact Cloudflare Worker script name to inspect and deploy for this website.</comment></field>
+                <field id="api_token" type="obscure" sortOrder="30" showInDefault="1" showInWebsite="1"><label>Scoped API token</label><backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model><comment>Create a scoped API token in Cloudflare with Worker read/deploy and secret-management access for this account. Global API keys are unsupported.</comment></field>
+            </group>
+            <group id="deployment" translate="label" sortOrder="30" showInDefault="1" showInWebsite="1">
+                <label>Deployment</label>
+                <field id="mode" type="select" sortOrder="10" showInDefault="1" showInWebsite="1"><label>Deployment mode</label><source_model>MerchantDuo\CloudflareApo\Model\Config\Source\DeploymentMode</source_model><comment>Use Local Node.js to build with the installed package lockfile. Workers Builds is not available yet.</comment></field>
+            </group>
+            <group id="logging" translate="label" sortOrder="40" showInDefault="1" showInWebsite="1">
+                <label>Cloudflare API logging</label>
+                <field id="api_requests" type="select" sortOrder="10" showInDefault="1" showInWebsite="1"><label>Log API requests</label><source_model>Magento\Config\Model\Config\Source\Yesno</source_model><comment>Logs redacted API method, URL, status, and duration to var/log/cloudflare_apo.log.</comment></field>
+                <field id="api_responses" type="select" sortOrder="20" showInDefault="1" showInWebsite="1"><label>Debug API responses</label><source_model>Magento\Config\Model\Config\Source\Yesno</source_model><comment>Also logs a bounded, redacted API response body. Enable only while diagnosing an issue.</comment></field>
+            </group>
+            <group id="actions" translate="label" sortOrder="45" showInDefault="1" showInWebsite="1">
+                <label>Worker Management</label>
+                <field id="operations" type="note" sortOrder="10" showInDefault="1" showInWebsite="1"><label>Actions</label><frontend_model>MerchantDuo\CloudflareApo\Block\System\Config\Actions</frontend_model><comment>Actions are queued and processed by cron. Deploy and rollback change Cloudflare traffic.</comment></field>
+            </group>
+            <group id="origin" translate="label" sortOrder="50" showInDefault="1" showInWebsite="1">
+                <label>Origin</label>
+                <field id="host" type="text" sortOrder="10" showInDefault="1" showInWebsite="1"><label>Origin host</label><validate>required-entry</validate><comment>Hostname and optional port the Worker uses to fetch Magento, for example origin.example.internal:8080.</comment></field>
+                <field id="protocol" type="select" sortOrder="20" showInDefault="1" showInWebsite="1"><label>Origin protocol</label><source_model>MerchantDuo\CloudflareApo\Model\Config\Source\Protocol</source_model><comment>Protocol used when the Worker connects to the Magento origin. Match the origin listener, not the public site URL.</comment></field>
+            </group>
+            <group id="cache" translate="label" sortOrder="60" showInDefault="1" showInWebsite="1">
+                <label>Cache</label>
+                <field id="ttl" type="text" sortOrder="10" showInDefault="1" showInWebsite="1"><label>TTL seconds</label><validate>validate-digits</validate><comment>How long an eligible Worker response remains fresh in Cloudflare's cache.</comment></field>
+                <field id="stale" type="text" sortOrder="20" showInDefault="1" showInWebsite="1"><label>Stale seconds</label><validate>validate-digits</validate><comment>Additional stale-while-revalidate period served while Cloudflare refreshes a cached response.</comment></field>
+                <field id="statuses" type="text" sortOrder="30" showInDefault="1" showInWebsite="1"><label>Cacheable statuses</label><comment>Comma-separated HTTP status codes eligible for caching, for example 200,404.</comment></field>
+                <field id="mime_types" type="text" sortOrder="40" showInDefault="1" showInWebsite="1"><label>Cacheable MIME types</label><comment>Comma-separated content types eligible for caching, normally text/html.</comment></field>
+            </group>
+        </section>
+    </system>
+</config>

@@ -1,101 +1,125 @@
-# Cloudflare Worker FPC for Magento 2
+# Cloudflare full-page cache for Magento 2
 
-A Cloudflare Worker implementing Full Page Cache (FPC) for Magento 2 stores. Uses Cloudflare KV for storage and implements stale-while-revalidate for optimal performance.
+A Magento full-page cache that does not need a Varnish server.
 
-## Features
+This package puts the public storefront cache on Cloudflare. Anonymous product,
+category, CMS, and other public pages can be served near the visitor, while
+customer sessions, carts, checkout, administration, and other private requests
+continue to Magento.
 
-- **Stale-While-Revalidate** - Serves stale content while fetching fresh version in background
-- **Smart Cache Bypass** - Automatic bypass for logged-in users, checkout, admin paths
-- **GraphQL Support** - Caches GraphQL responses with X-Magento-Cache-Id variation
-- **Secure Purging** - Protected endpoint for cache invalidation
-- **Debug Headers** - `X-FPC-Cache` (HIT/MISS/STALE/UNCACHEABLE) for easy debugging
-- **Fully Configurable** - All settings overridable via environment variables
+The Magento module supplies the store-specific configuration and sends cache
+invalidations when Magento content changes. The Worker contains the request and
+cache policy. Page bodies are not stored in Magento, Redis, or Worker KV.
 
-## Quick Start
+![Screenshot](screenshot.png)
 
-```bash
-# Install dependencies
-npm install
+## Why use it
 
-# Create project
-make create-project name=PROJECT_NAME
+- No separate Varnish host to install, size, monitor, or keep in RAM.
+- The cache is distributed across Cloudflare instead of living on one server.
+- Traffic is not limited by the memory or CPU of a fixed cache VM.
+- Smaller stores can start on the limited
+  [Cloudflare Workers Free plan](https://developers.cloudflare.com/workers/platform/pricing/).
+- Magento cache tags trigger targeted invalidation, with a full purge available
+  for broader cache flushes.
+- Private Magento traffic bypasses the shared cache before it reaches the cached
+  Worker entrypoint.
 
-# Edit PROJECT_NAME/wrangler.jsonc and PROJECT_NAME/.dev.vars with your settings
+Cloudflare usage is not unconditionally free, and no service is literally
+infinite. Charges and limits depend on the Cloudflare plan. The practical
+difference is that cache capacity follows Cloudflare's network instead of a
+Varnish machine attached to the Magento stack.
 
-# Start local dev server (both ORIGIN_HOST and REPLACE_ORIGIN_LINKS MUST be set)
-make dev name=PROJECT_NAME 
+## Requirements
 
-# Deploy to Cloudflare
-make deploy name=PROJECT_NAME
+- Magento 2 with PHP 8.1 or later;
+- a Cloudflare account with Workers available;
+- Composer;
+- Node.js and npm for the local Worker build.
+
+The Magento origin must have a hostname that the Worker can reach without
+routing back through the Worker itself.
+
+## Install the Magento module
+
+Install the Composer package from the repository configured for your Magento
+project:
+
+```sh
+composer require merchantduo/magento2-cloudflare-apo
+bin/magento module:enable MerchantDuo_CloudflareApo
+bin/magento setup:upgrade
 ```
 
-## Project Structure
+For a production installation, run the normal deployment steps used by the
+store, including DI compilation and cache cleaning:
 
-```
-src/
-├── index.ts      # Entry point - fetch handler
-├── types.ts      # TypeScript interfaces
-├── config.ts     # Environment parsing & defaults
-├── context.ts    # Request analysis & cache keys
-├── cache.ts      # KV storage operations
-├── origin.ts     # Origin fetching logic
-├── response.ts   # Response formatting
-└── purge.ts      # Cache purge handling
+```sh
+bin/magento setup:di:compile
+bin/magento cache:clean
 ```
 
-## Configuration
+## Configure it
 
-All settings have sensible defaults and can be overridden via environment variables.
-See [.dev.vars.example](.dev.vars.example) for complete reference.
+Open Stores > Configuration > Services > Cloudflare APO v3 and choose the
+website scope. Set:
 
-## Commands
+- the Magento origin hostname and protocol;
+- the Cloudflare account ID, Worker name, and scoped API token;
+- the public Worker URL and purge path;
+- a purge signing secret;
+- the cache lifetime and stale period.
 
-| Command | Description |
-|---------|-------------|
-| `make create-project name=PROJECT_NAME` | Create new project scaffold |
-| `make dev name=PROJECT_NAME` | Start local dev server for project |
-| `make deploy name=PROJECT_NAME` | Deploy project to Cloudflare |
-| `npm run dev` | Start local development server |
-| `npm run deploy` | Deploy to Cloudflare |
-| `npm run check` | TypeScript type check |
-| `npm run types` | Regenerate Env types |
-| `npm run kv:list` | List KV namespaces |
-| `npm run tail` | Stream live logs |
+Use a scoped Cloudflare API token. Global API keys are not supported. Keep the
+API token and purge signing secret separate.
 
-## Cache Purging
+Test access and build the website-specific Worker:
 
-Send a POST request with the purge secret:
-
-```bash
-# Purge a single page by its URL
-curl -X POST "https://your-domain.com/any-path" \
-  -H "X-Purge-Secret: YOUR_SECRET" 
-
-# Flush all
-curl -X POST "https://your-domain.com/__purge" \
-  -H "X-Purge-Secret: YOUR_SECRET"
-  -H "X-Purge-All: true"
+```sh
+bin/magento cloudflare-apo:worker:connection --website=1
+bin/magento cloudflare-apo:worker:build --website=1
 ```
 
-## Response Headers
+The build report prints its build hash. The validated Worker is written to:
 
-| Header | Values | Description |
-|--------|--------|-------------|
-| `X-FPC-Cache` | `HIT`, `MISS`, `STALE`, `UNCACHEABLE` | Cache status |
-| `X-FPC-Grace` | `normal` | Present when serving stale |
-| `X-Magento-Cache-Debug` | `HIT`, `MISS`, etc. | Magento compatibility |
-
-## Local Development
-
-```bash
-# Copy example env file
-cp .dev.vars.example PROJECT_NAME/.dev.vars
-
-# Edit .dev.vars with your settings
-# Start dev server
-make dev name=PROJECT_NAME
+```text
+var/merchantduo-cloudflare-apo/build/<website-id>/<build-hash>/
 ```
 
-## License
+## Deploy the Worker
 
-MIT
+The current module builds and validates the Worker but does not upload or
+activate it. Deploy the generated workspace with Wrangler:
+
+```sh
+cd var/merchantduo-cloudflare-apo/build/<website-id>/<build-hash>
+npx wrangler login
+npx wrangler deploy --name <worker-name>
+npx wrangler secret put PURGE_SECRET --name <worker-name>
+```
+
+Enter the same value for `PURGE_SECRET` that you saved as the Magento purge
+signing secret. Attach the Worker to the storefront route or custom domain in
+Cloudflare, then set its public URL in Magento.
+
+Enable purge delivery only after the Worker responds on that URL. Magento
+queues cache-tag and full-flush requests and sends them from cron. The queue can
+also be processed manually:
+
+```sh
+bin/magento cloudflare-apo:cache:purge
+```
+
+That command delivers pending queue entries; it does not create a new full
+purge by itself.
+
+## Current status
+
+The Worker policy, Magento configuration, local build, Cloudflare connection
+test, API logging, and signed purge queue are implemented. Worker deployment,
+rollback, Magento admin action buttons, and the Cache Management page action are
+not implemented yet.
+
+See the [module README](magento/MerchantDuo/CloudflareApo/README.md) for module
+settings and operations. [architecture.md](architecture.md) documents the
+request and cache boundaries.

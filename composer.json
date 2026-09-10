@@ -1,0 +1,21 @@
+{
+  "name": "merchantduo/magento2-cloudflare-apo",
+  "description": "Magento-owned delivery and invalidation control plane for the Cloudflare APO v3 Worker",
+  "type": "magento2-module",
+  "license": "proprietary",
+  "require": {
+    "php": ">=8.1",
+    "magento/framework": "*",
+    "magento/module-backend": "*",
+    "magento/module-config": "*",
+    "magento/module-store": "*"
+  },
+  "autoload": {
+    "files": [
+      "magento/MerchantDuo/CloudflareApo/registration.php"
+    ],
+    "psr-4": {
+      "MerchantDuo\\CloudflareApo\\": "magento/MerchantDuo/CloudflareApo/"
+    }
+  }
+}

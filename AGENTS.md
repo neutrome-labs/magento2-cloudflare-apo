@@ -1,93 +1,39 @@
-# AI Agents Instructions
+# Agent guide
 
-This file provides guidance for AI coding assistants (GitHub Copilot, Claude, Cursor, etc.) working on this codebase.
+## v3 architecture
 
-## Project Overview
+The Worker is a clean pre-launch v3 implementation, not a compatibility layer.
+Never reintroduce KV page storage, `CacheRecord`, hit-for-pass records, legacy
+environment aliases, or the v2 single-handler orchestration.
 
-Cloudflare Worker implementing Full Page Cache (FPC) for Magento 2 stores using KV storage and stale-while-revalidate strategy.
+`src/index.ts` is the cache-disabled Gateway. `src/storefront.ts` is the
+cache-enabled `WorkerEntrypoint`. Only the Gateway may inspect untrusted browser
+request state and then select the canonical loopback cache key. Only Storefront
+may call native cache purge, because native purges are entrypoint scoped.
 
-## Architecture
+`src/generated/project-config.ts` is a data-only Magento deployment artifact.
+Validate new fields in `src/config.ts`; do not add an environment-variable
+parser for normal policy. Runtime secrets remain bindings only. The Magento
+module uses a declarative, concurrency-safe purge queue; do not reintroduce a
+generic operational table, imperative schema patch, or partial deployment/VCL/AI
+workflow.
 
-```
-src/
-├── index.ts      # Entry point - fetch handler orchestration
-├── types.ts      # Shared TypeScript interfaces
-├── config.ts     # Environment parsing, defaults, debugLog
-├── context.ts    # Request analysis, URL normalization, cache key computation
-├── cache.ts      # KV operations (read/write), cached response building
-├── origin.ts     # Origin fetching, cacheability decisions
-├── response.ts   # Response finalization, header sanitization
-└── purge.ts      # Cache purge endpoint handling
-```
+## Changes
 
-## Key Patterns
+1. Read `architecture.md`, `plan-v3.md`, and `tasks.md` first.
+2. Add/refine the relevant task row before changing code.
+3. Keep request normalization, bypass, key construction, origin construction,
+   cache policy, and purge parsing independently testable and storage-free.
+4. Plugins must declare `needsBody`. Body-dependent behavior belongs on a
+   Storefront miss; it cannot run on a native hit.
+5. Update the generated configuration contract, README, architecture, and this
+   guide whenever a structural or protocol decision changes.
+6. Mark only locally verified work complete. Keep remote cache, purge,
+   multi-region, and production validation explicitly outstanding.
 
-### Configuration Flow
-```
-Env (strings from wrangler.json/secrets) → buildConfig() → Config (typed runtime values)
-```
+## Validation
 
-### Request Flow
-```
-Request → createContext() → shouldBypass() → computeCacheKey() → cache check → origin fetch → finalizeResponse()
-```
-
-### Module Dependencies
-- `types.ts` - No dependencies (pure types)
-- `config.ts` - Depends on `types`
-- `context.ts` - Depends on `types`
-- `response.ts` - Depends on `types`
-- `cache.ts` - Depends on `types`, `response`
-- `origin.ts` - Depends on `types`, `config`, `cache`
-- `purge.ts` - Depends on `types`
-- `index.ts` - Orchestrates all modules
-
-## Important Files
-
-| File | Purpose |
-|------|---------|
-| `wrangler.json` | Cloudflare Worker configuration |
-| `worker-configuration.d.ts` | **GENERATED** - Env interface, regenerate with `npm run types` |
-| `.dev.vars.example` | All available environment variables with defaults |
-| `tsconfig.json` | TypeScript configuration |
-
-> ⚠️ **Do not manually edit `worker-configuration.d.ts`** - it is auto-generated from `wrangler.json` by running `npm run types` (alias for `wrangler types`). When adding new environment variables, add them to `wrangler.json` and regenerate.
-
-## Code Guidelines
-
-1. **Types**: All interfaces in `types.ts`, keep modules focused
-2. **Config**: Defaults in `config.ts` DEFAULTS object, env overrides via `buildConfig()`
-3. **No circular imports**: Follow dependency hierarchy above
-4. **Pure functions**: Prefer stateless functions, pass context explicitly
-5. **Error handling**: Let errors bubble up to main handler
-
-## Environment Variables
-
-All config is overridable via environment. See `.dev.vars.example` for complete list with defaults.
-
-Key variables:
-- `PURGE_SECRET` - Required secret for cache purge endpoint
-- `DEBUG` - Enable console logging
-- `RETURN_CLAIMS` - Output X-APO-Claims header with request claims
-- `DEFAULT_TTL` - Cache TTL in seconds
-- `EXCLUDED_PATHS` - JSON array of paths to bypass
-
-## Commands
-
-```bash
-npm run dev      # Local development server
-npm run deploy   # Deploy to Cloudflare
-npm run check    # TypeScript type check
-npm run types    # Regenerate Env types from wrangler.json
-```
-
-## When Making Changes
-
-> **Important**: When modifying code structure, adding new modules, or changing configuration options, please update this AGENTS.md file and README.md accordingly.
-
-### Checklist for structural changes:
-- [ ] Update Architecture section if adding/removing modules
-- [ ] Update Module Dependencies if imports change
-- [ ] Update `.dev.vars.example` if adding env variables
-- [ ] Update README.md Environment Variables table
-- [ ] Run `npm run check` to verify types
+Run `npm run check`, `npm run types`, and a Wrangler configuration validation
+after structural changes. Local Wrangler does not substitute for native Workers
+Caching acceptance: stage warm hits, stale windows, concurrent misses, private
+traffic, and entrypoint-scoped purges before production routing.

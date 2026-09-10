@@ -11,6 +11,8 @@ dist/
 
 # Client-specific configurations (all subfolders except src/)
 */
+!screenshot.png
 !src/
-
-
+!src/**/
+!magento/
+!magento/**/

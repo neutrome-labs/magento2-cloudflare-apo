@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <preference for="MerchantDuo\CloudflareApo\Api\BuildServiceInterface" type="MerchantDuo\CloudflareApo\Model\Build\BuildService"/>
+    <preference for="MerchantDuo\CloudflareApo\Api\PurgeServiceInterface" type="MerchantDuo\CloudflareApo\Model\Purge\PurgeService"/>
+    <virtualType name="MerchantDuoCloudflareApoLogger" type="Magento\Framework\Logger\Monolog">
+        <arguments><argument name="handlers" xsi:type="array"><item name="cloudflareApo" xsi:type="object">MerchantDuo\CloudflareApo\Logger\Handler</item></argument></arguments>
+    </virtualType>
+    <type name="MerchantDuo\CloudflareApo\Model\Cloudflare\ApiClient">
+        <arguments><argument name="logger" xsi:type="object">MerchantDuoCloudflareApoLogger</argument></arguments>
+    </type>
+    <type name="Magento\Backend\Block\Cache"><plugin name="merchantduo_cloudflare_apo_cache_purge_button" type="MerchantDuo\CloudflareApo\Plugin\Adminhtml\AddCachePurgeButton"/></type>
+    <virtualType name="MerchantDuoCloudflareApoDeployCommand" type="MerchantDuo\CloudflareApo\Console\Command\OperationCommand"><arguments><argument name="operation" xsi:type="string">deploy</argument></arguments></virtualType>
+    <virtualType name="MerchantDuoCloudflareApoRollbackCommand" type="MerchantDuo\CloudflareApo\Console\Command\OperationCommand"><arguments><argument name="operation" xsi:type="string">rollback</argument></arguments></virtualType>
+    <type name="Magento\Framework\Console\CommandList">
+        <arguments><argument name="commands" xsi:type="array">
+            <item name="cloudflareApoBuild" xsi:type="object">MerchantDuo\CloudflareApo\Console\Command\BuildWorkerCommand</item>
+            <item name="cloudflareApoConnection" xsi:type="object">MerchantDuo\CloudflareApo\Console\Command\ConnectionCommand</item>
+            <item name="cloudflareApoDeploy" xsi:type="object">MerchantDuoCloudflareApoDeployCommand</item>
+            <item name="cloudflareApoRollback" xsi:type="object">MerchantDuoCloudflareApoRollbackCommand</item>
+            <item name="cloudflareApoPurge" xsi:type="object">MerchantDuo\CloudflareApo\Console\Command\PurgeCommand</item>
+        </argument></arguments>
+    </type>
+</config>

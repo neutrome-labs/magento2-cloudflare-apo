@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="merchantduo_cloudflare_apo_purge_queue" resource="default" engine="innodb" comment="Cloudflare APO Purge Queue">
+        <column xsi:type="int" name="queue_id" unsigned="true" nullable="false" identity="true" comment="Queue ID"/>
+        <column xsi:type="smallint" name="website_id" unsigned="true" nullable="false" default="0" comment="Website ID"/>
+        <column xsi:type="mediumtext" name="payload" nullable="false" comment="Purge Payload"/>
+        <column xsi:type="varchar" name="state" nullable="false" length="16" default="pending" comment="State"/>
+        <column xsi:type="smallint" name="attempts" unsigned="true" nullable="false" default="0" comment="Delivery Attempts"/>
+        <column xsi:type="datetime" name="next_attempt_at" nullable="true" comment="Next Attempt At"/>
+        <column xsi:type="text" name="last_error" nullable="true" comment="Last Error"/>
+        <column xsi:type="timestamp" name="created_at" nullable="false" default="CURRENT_TIMESTAMP" on_update="false" comment="Created At"/>
+        <column xsi:type="timestamp" name="updated_at" nullable="false" default="CURRENT_TIMESTAMP" on_update="true" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY"><column name="queue_id"/></constraint>
+        <index referenceId="MERCHANTDUO_CF_APO_PURGE_QUEUE_STATE_NEXT" indexType="btree"><column name="state"/><column name="next_attempt_at"/></index>
+    </table>
+    <table name="merchantduo_cloudflare_apo_deployment" resource="default" engine="innodb" comment="Cloudflare APO Deployment">
+        <column xsi:type="int" name="deployment_id" unsigned="true" nullable="false" identity="true" comment="Deployment ID"/>
+        <column xsi:type="smallint" name="website_id" unsigned="true" nullable="false" comment="Website ID"/>
+        <column xsi:type="varchar" name="operation" nullable="false" length="16" comment="Operation"/>
+        <column xsi:type="varchar" name="state" nullable="false" length="16" default="pending" comment="State"/>
+        <column xsi:type="smallint" name="force" nullable="false" default="0" comment="Force Operation"/>
+        <column xsi:type="varchar" name="source_hash" nullable="true" length="64" comment="Worker Source Hash"/>
+        <column xsi:type="varchar" name="config_hash" nullable="true" length="64" comment="Configuration Hash"/>
+        <column xsi:type="varchar" name="build_hash" nullable="true" length="64" comment="Build Hash"/>
+        <column xsi:type="varchar" name="cloudflare_version_id" nullable="true" length="128" comment="Cloudflare Version ID"/>
+        <column xsi:type="varchar" name="previous_version_id" nullable="true" length="128" comment="Previous Cloudflare Version ID"/>
+        <column xsi:type="int" name="actor_user_id" unsigned="true" nullable="true" comment="Actor User ID"/>
+        <column xsi:type="text" name="error_summary" nullable="true" comment="Redacted Error Summary"/>
+        <column xsi:type="timestamp" name="created_at" nullable="false" default="CURRENT_TIMESTAMP" on_update="false" comment="Created At"/>
+        <column xsi:type="timestamp" name="updated_at" nullable="false" default="CURRENT_TIMESTAMP" on_update="true" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY"><column name="deployment_id"/></constraint>
+        <index referenceId="MERCHANTDUO_CF_APO_DEPLOYMENT_WEBSITE_STATE" indexType="btree"><column name="website_id"/><column name="state"/></index>
+    </table>
+</schema>

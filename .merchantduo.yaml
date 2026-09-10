@@ -1,0 +1,8 @@
+defaultEnvironment: local
+activeTheme: all
+testing:
+  allowInsecureTls: true
+environments:
+  local:
+    type: local
+    root: .

@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Acl/etc/acl.xsd">
+    <acl><resources><resource id="Magento_Backend::admin">
+        <resource id="MerchantDuo_CloudflareApo::root" title="Cloudflare APO" sortOrder="900">
+            <resource id="MerchantDuo_CloudflareApo::config" title="Configuration"/>
+            <resource id="MerchantDuo_CloudflareApo::connection" title="Test Cloudflare connection"/>
+            <resource id="MerchantDuo_CloudflareApo::build" title="Build Worker"/>
+            <resource id="MerchantDuo_CloudflareApo::deploy" title="Deploy or update Worker"/>
+            <resource id="MerchantDuo_CloudflareApo::rollback" title="Roll back Worker"/>
+        </resource>
+        <resource id="Magento_Backend::system"><resource id="Magento_Backend::tools"><resource id="Magento_Backend::cache"><resource id="Magento_Backend::additional_cache_management">
+            <resource id="MerchantDuo_CloudflareApo::purge" title="Flush Cloudflare full page cache"/>
+        </resource></resource></resource></resource>
+    </resource></resources></acl>
+</config>

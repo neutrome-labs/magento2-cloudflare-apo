@@ -1,0 +1,13 @@
+<?php /** @var \MerchantDuo\CloudflareApo\Block\System\Config\Actions $block */ ?>
+<div class="actions">
+    <?php foreach (['connection' => 'Test Cloudflare Connection', 'build' => 'Build and Validate Worker', 'deploy' => 'Deploy or Update Worker', 'rollback' => 'Roll Back Worker'] as $operation => $label): ?>
+        <form action="<?= $block->escapeUrl($block->postUrl($operation)) ?>" method="post" style="display:inline-block;margin-right:8px">
+            <input type="hidden" name="form_key" value="<?= $block->escapeHtmlAttr($block->formKey()) ?>" />
+            <input type="hidden" name="website" value="<?= (int) $block->websiteId() ?>" />
+            <button type="submit" class="action-<?= $operation === 'deploy' || $operation === 'rollback' ? 'primary' : 'secondary' ?>"<?= in_array($operation, ['deploy', 'rollback'], true) ? ' onclick="return confirm(\'This changes Cloudflare Worker traffic. Continue?\')"' : '' ?>><?= $block->escapeHtml(__($label)) ?></button>
+        </form>
+    <?php endforeach; ?>
+    <?php if ($latest = $block->latest()): ?>
+        <p class="note">Latest operation #<?= (int) $latest['deployment_id'] ?>: <?= $block->escapeHtml($latest['operation']) ?> (<?= $block->escapeHtml($latest['state']) ?>).</p>
+    <?php endif; ?>
+</div>

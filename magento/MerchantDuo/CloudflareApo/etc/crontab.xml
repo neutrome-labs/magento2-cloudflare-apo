@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Cron:etc/crontab.xsd">
+    <group id="default">
+        <job name="merchantduo_cloudflare_apo_run_operations" instance="MerchantDuo\CloudflareApo\Cron\RunOperations" method="execute"><schedule>* * * * *</schedule></job>
+        <job name="merchantduo_cloudflare_apo_flush_purges" instance="MerchantDuo\CloudflareApo\Cron\FlushPurgeQueue" method="execute"><schedule>*/2 * * * *</schedule></job>
+    </group>
+</config>
